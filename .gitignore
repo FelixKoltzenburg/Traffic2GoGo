@@ -1,0 +1,5 @@
+__pycache__/
+.pytest_cache/
+.nicegui/
+data/*.json
+.venv/
