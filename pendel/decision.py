@@ -14,7 +14,7 @@ Bedingungen schließen ein Verkehrsmittel ganz aus (z. B. Gewitter beim Rad).
 Jede Zahl wird als ``ScorePart`` gespeichert. So kann die Oberfläche genau
 zeigen, *warum* die App sich entschieden hat.
 """
-from __future__ import annotations
+from __future__ import annotations # hallo
 
 from datetime import datetime, time
 
