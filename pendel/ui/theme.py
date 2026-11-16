@@ -90,6 +90,13 @@ body { background: var(--bg) !important; color: var(--ink);
 """
 
 
+def html(content: str):
+    """Eigenes HTML einfügen. ``sanitize=False`` ist bei älteren NiceGUI-Versionen
+    (z. B. unter Python 3.9) Pflicht. Wichtig: Texte aus fremden Quellen vorher
+    mit ``html.escape`` entschärfen (siehe ``_esc`` in dashboard.py)."""
+    return ui.html(content, sanitize=False)
+
+
 def setup() -> None:
     """Einmalig beim Start: Schrift, Farben und CSS für alle Seiten."""
     ui.add_head_html(
@@ -119,7 +126,7 @@ def frame(active: str, demo: bool = False):
                 for path, label in (("/", "Heute"), ("/verlauf", "Verlauf"), ("/einstellungen", "Einstellungen")):
                     ui.link(label, path).classes("navlink" + (" active" if path == active else ""))
             if demo:
-                ui.html('<span class="pill warn"><span class="material-icons" style="font-size:15px">science</span>Demo</span>')
+                html('<span class="pill warn"><span class="material-icons" style="font-size:15px">science</span>Demo</span>')
 
             def toggle_dark():
                 dark.value = not dark.value
@@ -137,7 +144,7 @@ def frame(active: str, demo: bool = False):
 
     with ui.column().classes("page"):
         yield
-        ui.html(
+        html(
             '<div class="footer tiny muted" style="margin-top:8px">'
             'Wetter: <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> (CC BY 4.0) · '
             'Routing: <a href="https://routing.openstreetmap.de" target="_blank">FOSSGIS-OSRM</a>, '

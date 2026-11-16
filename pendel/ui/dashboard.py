@@ -157,7 +157,7 @@ def _hero(result: Result) -> None:
                         ui.label(rec.headline).classes("hero-mode")
                         conf = {"klar": ("verified", "Klare Sache"), "knapp": ("balance", "Knappe Entscheidung")}
                         ic, txt = conf.get(rec.confidence, ("help", "Unsicher"))
-                        ui.html(f'<span class="pill on-dark"><span class="material-icons" style="font-size:15px">{ic}</span>{txt}</span>')
+                        theme.html(f'<span class="pill on-dark"><span class="material-icons" style="font-size:15px">{ic}</span>{txt}</span>')
                 with ui.column().classes("gap-2"):
                     for r in rec.reasons[:5]:
                         with ui.element("div").classes("hero-reason"):
@@ -176,7 +176,7 @@ def _hero(result: Result) -> None:
                             ui.label(f"{s.felt_min:.0f} min" if s.available else "entfällt").classes("num font-bold")
                         width = max(4, s.felt_min / mx * 100) if s.available and mx > 0 else 0
                         opacity = 1 if s.mode == rec.best else 0.55
-                        ui.html(
+                        theme.html(
                             f'<div class="bar-track"><div class="bar-fill" style="width:{width:.0f}%;opacity:{opacity}"></div></div>'
                         ).classes("w-full")
                 ui.label("Weniger ist besser: Reisezeit + Aufschläge + Kosten.").classes("tiny opacity-80")
@@ -195,9 +195,9 @@ def _mode_card(s: ModeScore, winner: bool, scale: float, delay: int) -> None:
                     ui.icon(s.mode.icon).classes("text-2xl")
                 ui.label(s.mode.label).classes("text-lg font-bold")
             if winner:
-                ui.html('<span class="pill good"><span class="material-icons" style="font-size:14px">emoji_events</span>Empfohlen</span>')
+                theme.html('<span class="pill good"><span class="material-icons" style="font-size:14px">emoji_events</span>Empfohlen</span>')
             elif not s.available:
-                ui.html('<span class="pill bad">Entfällt</span>')
+                theme.html('<span class="pill bad">Entfällt</span>')
 
         if not s.available:
             with ui.row().classes("items-start gap-2 no-wrap"):
@@ -209,16 +209,16 @@ def _mode_card(s: ModeScore, winner: bool, scale: float, delay: int) -> None:
             ui.label(f"{s.felt_min:.0f}").classes("big-num num")
             ui.label("gefühlte min").classes("muted font-medium")
         with ui.row().classes("gap-2 wrap"):
-            ui.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">schedule</span>ca. {s.travel_min:.0f} min</span>')
-            ui.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">euro</span>{de(s.cost_eur, 2)} €</span>')
+            theme.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">schedule</span>ca. {s.travel_min:.0f} min</span>')
+            theme.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">euro</span>{de(s.cost_eur, 2)} €</span>')
         for n in s.notes[:2]:
             ui.label(n).classes("tiny muted leading-snug")
         with ui.expansion("Wie kommt die Zahl zustande?", icon="calculate").props("dense header-class='px-0 text-[color:var(--muted)]'").classes("w-full tiny"):
             for p in s.parts:
                 sign = "plus" if p.minutes > 0 and not p.label.startswith("Fahrzeit") else "minus" if p.minutes < 0 else ""
                 txt = f"{p.minutes:+.1f}".replace(".", ",") if p.label != s.parts[0].label else f"{p.minutes:.1f}".replace(".", ",")
-                ui.html(f'<div class="part-row"><span>{p.label}</span><span class="num {sign}">{txt} min</span></div>').classes("w-full")
-            ui.html(f'<div class="part-row" style="font-weight:700"><span>Summe</span><span class="num">{de(s.felt_min)} min</span></div>').classes("w-full")
+                theme.html(f'<div class="part-row"><span>{_esc(p.label)}</span><span class="num {sign}">{txt} min</span></div>').classes("w-full")
+            theme.html(f'<div class="part-row" style="font-weight:700"><span>Summe</span><span class="num">{de(s.felt_min)} min</span></div>').classes("w-full")
 
 
 def _weather_card(data: TravelData, result: Result) -> None:
@@ -304,7 +304,7 @@ def _transit_card(data: TravelData) -> None:
         return
     for opt in data.transit[:4]:
         chips = "".join(
-            f'<span class="line-chip {(_line_kind(ln))}">{ln}</span>' for ln in opt.lines
+            f'<span class="line-chip {(_line_kind(ln))}">{_esc(ln)}</span>' for ln in opt.lines
         ) or '<span class="muted tiny">zu Fuß</span>'
         if opt.cancelled:
             status = '<span class="pill bad">Fällt aus</span>'
@@ -315,7 +315,7 @@ def _transit_card(data: TravelData) -> None:
         else:
             status = '<span class="pill good">pünktlich</span>'
         strike = "text-decoration:line-through;opacity:.6;" if opt.cancelled else ""
-        ui.html(
+        theme.html(
             f'<div class="conn"><div style="{strike}"><div class="font-bold num">{opt.planned_departure:%H:%M}</div>'
             f'<div class="tiny muted num">an {opt.arrival:%H:%M}</div></div>'
             f'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;{strike}">{chips}'
@@ -353,7 +353,7 @@ def _traffic_card(data: TravelData) -> None:
             "roadworks": ("construction", "var(--warn)"),
         }.get(inc.kind, ("warning", "var(--bad)" if inc.blocked else "var(--warn)"))
         delay = f'<span class="pill bad">+{inc.delay_min:.0f} min</span>' if inc.delay_min else ""
-        ui.html(
+        theme.html(
             f'<div class="incident"><span class="material-icons" style="color:{color}">{icon}</span>'
             f'<div style="flex:1"><div class="font-semibold text-sm">{_esc(inc.title)}</div>'
             f'<div class="tiny muted">{_esc(inc.subtitle)}</div></div>{delay}</div>'

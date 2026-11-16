@@ -50,14 +50,17 @@ def login_page():
 
 app.on_startup(lambda: background_tasks.create(scheduler.run_forever(), name="morning-scheduler"))
 
+# Render setzt die Variable RENDER automatisch. Lokal ist sie nicht gesetzt.
+ON_SERVER = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
+
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         title="Pendel-Berater",
         favicon="🚲",
         language="de",
-        host=os.environ.get("HOST", "0.0.0.0"),
+        host=os.environ.get("HOST", "0.0.0.0" if ON_SERVER else "127.0.0.1"),
         port=int(os.environ.get("PORT", 8080)),
         storage_secret=os.environ.get("STORAGE_SECRET", "bitte-auf-dem-server-aendern"),
         reload=os.environ.get("RELOAD", "0") == "1",
-        show=False,
+        show=not ON_SERVER,  # lokal öffnet sich der Browser von selbst
     )

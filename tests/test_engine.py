@@ -1,5 +1,7 @@
 """Testet den kompletten Live-Ablauf mit nachgebauten API-Antworten
 (ohne Internet). So sieht man, ob alle Teile zusammenspielen."""
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime
 
