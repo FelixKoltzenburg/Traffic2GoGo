@@ -6,6 +6,7 @@ Die letzte Suche merkt sich der Browser (``app.storage.user``).
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from typing import Awaitable, Callable
@@ -109,22 +110,31 @@ def known_places() -> list[Place]:
 
 
 class PlaceInput:
-    """Textfeld, das beim Tippen Adressen vorschlägt (wie bei der DB-App)."""
+    """Textfeld, das beim Tippen Adressen vorschlägt (wie bei der DB-App).
+
+    Die Vorschläge sind eine eigene Liste direkt unter dem Feld. Sie geht auf,
+    wenn man ins Feld klickt oder tippt, und schließt sich, sobald man einen
+    Vorschlag wählt, woanders hinklickt oder Esc drückt.
+    """
 
     def __init__(self, label: str, icon: str, place: Place | None, on_change: Callable[[], None]) -> None:
         self.place = place
         self._on_change = on_change
         self._muted = False
-        self.input = (
-            ui.input(label, value=place.name if place else "")
-            .props("outlined clearable debounce=400 autocomplete=off")
-            .classes("w-full search-field")
-        )
-        with self.input.add_slot("prepend"):
-            ui.icon(icon).classes("text-[color:var(--muted)]")
-        with self.input:
-            self.menu = ui.menu().props("no-parent-event no-focus fit").classes("search-menu")
+        self._seq = 0  # zählt Suchanfragen hoch; veraltete Antworten werden ignoriert
+        with ui.element("div").classes("relative w-full"):
+            self.input = (
+                ui.input(label, value=place.name if place else "")
+                .props("outlined clearable debounce=350 autocomplete=off")
+                .classes("w-full search-field")
+            )
+            with self.input.add_slot("prepend"):
+                ui.icon(icon).classes("text-[color:var(--muted)]")
+            self.box = ui.column().classes("search-menu gap-0")
+            self.box.set_visibility(False)
         self.input.on("focus", lambda: self._suggest(""))
+        self.input.on("blur", self._blurred)
+        self.input.on("keydown.esc", self.hide)
         self.input.on_value_change(self._typed)
 
     def set(self, place: Place | None) -> None:
@@ -132,6 +142,15 @@ class PlaceInput:
         self.place = place
         self.input.value = place.name if place else ""
         self._muted = False
+
+    def hide(self) -> None:
+        self._seq += 1  # laufende Suchen sollen die Liste nicht wieder öffnen
+        self.box.set_visibility(False)
+
+    async def _blurred(self) -> None:
+        # kurz warten, damit ein Klick auf einen Vorschlag noch ankommt
+        await asyncio.sleep(0.25)
+        self.hide()
 
     async def _typed(self, e) -> None:
         if self._muted:
@@ -143,6 +162,8 @@ class PlaceInput:
         await self._suggest(text)
 
     async def _suggest(self, text: str) -> None:
+        self._seq += 1
+        seq = self._seq
         q = text.lower()
         saved = [p for p in known_places() if not q or q in p.name.lower()]
         found: list[Place] = []
@@ -152,8 +173,10 @@ class PlaceInput:
                 found = await geocode.search(text)
             except Exception:  # noqa: BLE001 – ohne Internet gibt es eben nur gespeicherte Orte
                 error = True
-        self.menu.clear()
-        with self.menu:
+        if seq != self._seq:
+            return  # inzwischen wurde weitergetippt, gewählt oder woanders hingeklickt
+        self.box.clear()
+        with self.box:
             if saved:
                 ui.label("Gespeichert").classes("tiny muted px-4 pt-2")
                 for p in saved[:5]:
@@ -169,10 +192,10 @@ class PlaceInput:
                     else "Mindestens 3 Buchstaben eingeben" if len(text) < 3 else "Nichts gefunden"
                 )
                 ui.label(msg).classes("tiny muted px-4 py-3")
-        self.menu.open()
+        self.box.set_visibility(True)
 
     def _item(self, p: Place, icon: str) -> None:
-        with ui.item(on_click=lambda p=p: self._choose(p)).classes("search-item"):
+        with ui.item(on_click=lambda p=p: self._choose(p)).classes("search-item w-full"):
             with ui.item_section().props("avatar").classes("min-w-0"):
                 ui.icon(icon).classes("text-[color:var(--muted)]")
             with ui.item_section():
@@ -183,7 +206,7 @@ class PlaceInput:
 
     def _choose(self, p: Place) -> None:
         self.set(p)
-        self.menu.close()
+        self.hide()
         self._on_change()
 
 

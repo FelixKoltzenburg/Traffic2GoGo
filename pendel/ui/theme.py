@@ -108,8 +108,9 @@ body { background: var(--bg) !important; color: var(--ink);
 /* Verbindungssuche */
 .search-card { padding: 18px 20px; }
 .search-field .q-field__control { border-radius: 14px; background: var(--soft); }
-.search-menu { border-radius: 14px; min-width: 280px; }
-.body--dark .search-menu { background: var(--card); color: var(--ink); }
+.search-menu { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 3000;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(15,23,42,.16); max-height: 340px; overflow-y: auto; padding: 4px 0; }
 .search-item { min-height: 44px; }
 .seg { border: 1px solid var(--line); border-radius: 999px; }
 .route-chip { border-radius: 999px !important; color: var(--ink) !important; border-color: var(--line) !important; }
