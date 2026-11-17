@@ -18,7 +18,7 @@ def register() -> None:
         if not state.check_login():
             return
         s = state.settings()
-        with theme.frame("/einstellungen", demo=s.demo_mode):
+        with theme.frame("/einstellungen"):
             ui.label("Einstellungen").classes("text-2xl font-extrabold tracking-tight")
             routes_section()
             prefs_section()
@@ -283,9 +283,6 @@ def sources_section() -> None:
 
         demo.on_value_change(on_demo)
         scen.on_value_change(on_scen)
-
-        name = ui.input("Dein Vorname (für die Begrüßung)", value=s.user_name).props("outlined dense").classes("w-full md:w-1/2")
-        name.on("blur", lambda: (setattr(s, "user_name", (name.value or "").strip()), state.save()))
 
         api = ui.input("Bahn-API (Basis-URL)", value=s.transit_api_base).props("outlined dense").classes("w-full")
         api.on("blur", lambda: (setattr(s, "transit_api_base", (api.value or "").strip() or "https://v6.db.transport.rest"), state.save()))

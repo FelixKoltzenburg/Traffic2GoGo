@@ -1,4 +1,4 @@
-"""Pendel-Berater – Startdatei.
+"""Traffic2GoGo – Startdatei.
 
 Starten:   python main.py
 Dann im Browser öffnen:  http://localhost:8080
@@ -33,9 +33,8 @@ def login_page():
     ui.add_css("body{display:grid;place-items:center;min-height:100vh}")
     with ui.column().classes("card w-[360px] max-w-[92vw] gap-4 items-stretch mt-[18vh] mx-auto"):
         with ui.row().classes("items-center gap-3"):
-            with ui.element("div").classes("brand-mark"):
-                ui.icon("alt_route").classes("text-xl")
-            ui.label("Pendel-Berater").classes("text-xl font-extrabold")
+            ui.image(theme.LOGO_URL).classes("brand-mark")
+            theme.html(f'<div class="brand-name">{theme.APP_NAME_HTML}</div>')
         pw = ui.input("Passwort", password=True, password_toggle_button=True).props("outlined dense autofocus")
 
         def go():
@@ -55,8 +54,8 @@ ON_SERVER = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
 
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
-        title="Pendel-Berater",
-        favicon="🚲",
+        title=theme.APP_NAME,
+        favicon=theme.LOGO_FILE,
         language="de",
         host=os.environ.get("HOST", "0.0.0.0" if ON_SERVER else "127.0.0.1"),
         port=int(os.environ.get("PORT", 8080)),

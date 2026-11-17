@@ -29,7 +29,6 @@ def default_settings() -> Settings:
             Route(id="r1", name="Zur DHBW", origin=home, destination=dhbw, departure="07:45"),
             Route(id="r2", name="Zum Praxispartner", origin=home, destination=work, departure="07:15"),
         ],
-        user_name="Felix",
     )
 
 

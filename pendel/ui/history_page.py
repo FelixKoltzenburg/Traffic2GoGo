@@ -20,7 +20,7 @@ def register() -> None:
         if not state.check_login():
             return
         s = state.settings()
-        with theme.frame("/verlauf", demo=s.demo_mode):
+        with theme.frame("/verlauf"):
             with ui.row().classes("w-full items-end justify-between"):
                 with ui.column().classes("gap-0"):
                     ui.label("Verlauf").classes("text-2xl font-extrabold tracking-tight")

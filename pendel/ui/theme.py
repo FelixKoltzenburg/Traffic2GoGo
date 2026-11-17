@@ -3,17 +3,29 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+from pathlib import Path
+
 from nicegui import app, ui
+
+APP_NAME = "Traffic2GoGo"
+APP_NAME_HTML = 'Traffic<span>2GoGo</span>'
+LOGO_FILE = Path(__file__).with_name("logo.svg")
+LOGO_URL = "/static/logo.svg"
 
 CSS = r"""
 :root {
-  --bg: #f3f5fa; --card: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #e5e8f0;
-  --soft: #f7f8fc; --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
-  --rad: #16a34a; --bahn: #2563eb; --auto: #ea580c; --warn: #d97706; --bad: #dc2626; --good: #16a34a;
+  /* Markenfarben: Ampel-Grün ("Go") auf dunklem Navy */
+  --brand: #16a34a; --brand-soft: #dcfce7; --navy: #0f172a; --navy-2: #1e293b;
+  --bg: #f4f6f8; --card: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #e3e7ee;
+  --soft: #f6f8fa; --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
+  /* Verkehrsmittel – drei klar unterscheidbare Farben */
+  --rad: #10b981; --bahn: #6366f1; --auto: #f59e0b;
+  --warn: #d97706; --bad: #dc2626; --good: #16a34a;
 }
 .body--dark {
-  --bg: #0b1020; --card: #131a2e; --ink: #e8ecf6; --muted: #94a3b8; --line: #243049;
-  --soft: #182038; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  --brand: #22c55e; --brand-soft: rgba(34,197,94,.14);
+  --bg: #0b1120; --card: #121a2c; --ink: #e8ecf6; --muted: #94a3b8; --line: #243049;
+  --soft: #172036; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
 }
 body { background: var(--bg) !important; color: var(--ink);
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
@@ -27,16 +39,21 @@ body { background: var(--bg) !important; color: var(--ink);
 .num { font-variant-numeric: tabular-nums; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
   font-size: .78rem; font-weight: 600; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
-.pill.good { background: rgba(22,163,74,.12); color: var(--good); border-color: transparent; }
+.pill.good { background: var(--brand-soft); color: var(--good); border-color: transparent; }
 .pill.warn { background: rgba(217,119,6,.14); color: var(--warn); border-color: transparent; }
 .pill.bad  { background: rgba(220,38,38,.12); color: var(--bad); border-color: transparent; }
-.pill.on-dark { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.25); }
+.pill.on-dark { background: rgba(255,255,255,.10); color: #fff; border-color: rgba(255,255,255,.18); }
 
 /* Kopfzeile */
 .topbar { background: rgba(255,255,255,.75); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 .body--dark .topbar { background: rgba(11,16,32,.75); }
-.brand-mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff;
-  background: linear-gradient(135deg, var(--rad), var(--bahn) 55%, var(--auto)); }
+.brand-mark { width: 36px; height: 36px; display: block; flex-shrink: 0; }
+.body--dark .brand-mark { box-shadow: 0 0 0 1px rgba(255,255,255,.14); border-radius: 9px; }
+/* Im Dunkelmodus wäre Navy auf Navy unsichtbar: Buttons und Auswahl dort in Ampel-Grün */
+.body--dark { --q-primary: #22c55e !important; }
+.body--dark .bg-primary { color: #0b1120 !important; }
+.brand-name { font-weight: 800; font-size: 1.1rem; letter-spacing: -.02em; color: var(--ink); line-height: 1.1; }
+.brand-name span { color: var(--brand); }
 .navlink { padding: 6px 12px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: .9rem;
   text-decoration: none; transition: background .15s, color .15s; }
 .navlink:hover { background: var(--soft); color: var(--ink); }
@@ -44,19 +61,19 @@ body { background: var(--bg) !important; color: var(--ink);
 
 /* Hero-Karte mit der Empfehlung */
 .hero { position: relative; overflow: hidden; border-radius: 26px; padding: 28px; color: #fff;
-  box-shadow: 0 18px 40px -18px var(--accent); }
-.hero::after { content: ''; position: absolute; right: -80px; top: -80px; width: 320px; height: 320px;
-  border-radius: 50%; background: rgba(255,255,255,.10); }
-.hero::before { content: ''; position: absolute; right: 90px; bottom: -120px; width: 260px; height: 260px;
-  border-radius: 50%; background: rgba(255,255,255,.07); }
-.hero-icon { width: 84px; height: 84px; border-radius: 24px; background: rgba(255,255,255,.18);
-  display: grid; place-items: center; border: 1px solid rgba(255,255,255,.3); }
-.hero-mode { font-size: 3.2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
+  box-shadow: 0 18px 40px -22px rgba(15,23,42,.6); }
+.hero::after { content: ''; position: absolute; right: -120px; top: -140px; width: 420px; height: 420px;
+  border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 45%, transparent) 0%, transparent 70%); }
+.hero::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--accent); }
+.hero-icon { width: 84px; height: 84px; border-radius: 24px; background: var(--accent);
+  display: grid; place-items: center; box-shadow: 0 10px 30px -8px var(--accent); }
+.hero-mode { font-size: 3.2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--accent); }
 .hero-reason { display: flex; gap: 8px; align-items: flex-start; font-size: .95rem; line-height: 1.35; }
-.hero-panel { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22); border-radius: 18px;
+.hero-panel { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 18px;
   padding: 16px; position: relative; z-index: 1; }
-.bar-track { height: 10px; border-radius: 999px; background: rgba(255,255,255,.18); overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 999px; background: #fff; transition: width .6s ease; }
+.bar-track { height: 10px; border-radius: 999px; background: rgba(255,255,255,.10); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; transition: width .6s ease; }
 .fade-in { animation: fadeUp .45s ease both; }
 .fade-in.d1 { animation-delay: .06s; } .fade-in.d2 { animation-delay: .12s; } .fade-in.d3 { animation-delay: .18s; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -105,28 +122,26 @@ def setup() -> None:
         shared=True,
     )
     ui.add_css(CSS, shared=True)
+    app.add_static_file(local_file=LOGO_FILE, url_path=LOGO_URL)
 
 
 @contextmanager
-def frame(active: str, demo: bool = False):
+def frame(active: str):
     """Rahmen jeder Seite: Kopfzeile + zentrierter Inhaltsbereich."""
-    ui.colors(primary="#2563eb", secondary="#16a34a", accent="#ea580c", positive="#16a34a", negative="#dc2626")
+    ui.colors(primary="#0f172a", secondary="#16a34a", accent="#f59e0b", positive="#16a34a", negative="#dc2626")
     dark = ui.dark_mode(value=app.storage.user.get("dark", False))
 
     with ui.header().classes("topbar text-[color:var(--ink)] px-5 py-3").style("box-shadow:none"):
         with ui.row().classes("w-full max-w-[1180px] mx-auto items-center no-wrap gap-3"):
             with ui.link(target="/").classes("no-underline flex flex-nowrap items-center gap-3 shrink-0"):
-                with ui.element("div").classes("brand-mark"):
-                    ui.icon("alt_route").classes("text-xl")
+                ui.image(LOGO_URL).classes("brand-mark")
                 with ui.column().classes("gap-0"):
-                    ui.label("Pendel-Berater").classes("font-extrabold text-[1.05rem] text-[color:var(--ink)] leading-tight whitespace-nowrap")
+                    html(f'<div class="brand-name">{APP_NAME_HTML}</div>')
                     ui.label("Auto · Bahn · Rad").classes("tiny muted leading-tight max-sm:hidden")
             ui.space()
             with ui.row().classes("gap-1 items-center max-sm:hidden"):
                 for path, label in (("/", "Heute"), ("/verlauf", "Verlauf"), ("/einstellungen", "Einstellungen")):
                     ui.link(label, path).classes("navlink" + (" active" if path == active else ""))
-            if demo:
-                html('<span class="pill warn"><span class="material-icons" style="font-size:15px">science</span>Demo</span>')
 
             def toggle_dark():
                 dark.value = not dark.value

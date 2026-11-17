@@ -27,7 +27,7 @@ class Mode(str, Enum):
 
     @property
     def color(self) -> str:  # Akzentfarbe in der Oberfläche
-        return {"rad": "#16a34a", "bahn": "#2563eb", "auto": "#ea580c"}[self.value]
+        return {"rad": "#10b981", "bahn": "#6366f1", "auto": "#f59e0b"}[self.value]
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,6 @@ class Preferences:
 class Settings:
     routes: list[Route] = field(default_factory=list)
     prefs: Preferences = field(default_factory=Preferences)
-    user_name: str = ""
     demo_mode: bool = True
     demo_scenario: str = "auto"  # auto | sonne | regen | stau | bahnchaos | winter
     ntfy_topic: str = ""  # optional: Push-Nachricht über ntfy.sh

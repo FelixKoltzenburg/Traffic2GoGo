@@ -21,7 +21,7 @@ def register() -> None:
         if not state.check_login():
             return
         settings = state.settings()
-        with theme.frame("/", demo=settings.demo_mode):
+        with theme.frame("/"):
             if not settings.routes:
                 _empty_state()
                 return
@@ -33,7 +33,7 @@ def register() -> None:
             # --- Kopf: Streckenwahl + Aktualisieren ---------------------------
             with ui.row().classes("w-full items-end justify-between gap-4 wrap"):
                 with ui.column().classes("gap-1"):
-                    ui.label(f"Guten {_greeting()}" + (f", {settings.user_name}" if settings.user_name else "")).classes("text-2xl font-extrabold tracking-tight")
+                    ui.label(f"{_greeting()} – wohin geht's?").classes("text-2xl font-extrabold tracking-tight")
                     info = ui.label("").classes("muted")
                 with ui.row().classes("items-center gap-2"):
                     toggle = ui.toggle(
@@ -72,7 +72,9 @@ def register() -> None:
 
 def _greeting() -> str:
     h = timeutil.now().hour
-    return "Morgen" if h < 11 else "Tag" if h < 18 else "Abend"
+    if h < 5:
+        return "Gute Nacht"
+    return "Guten Morgen" if h < 11 else "Guten Tag" if h < 18 else "Guten Abend"
 
 
 def _empty_state() -> None:
@@ -143,8 +145,7 @@ def _hero(result: Result) -> None:
         return
 
     color = rec.best.color
-    gradient = f"linear-gradient(135deg, {color} 0%, color-mix(in srgb, {color} 70%, #0f172a) 100%)"
-    with ui.element("div").classes("hero w-full fade-in").style(f"background:{gradient}; --accent:{color}"):
+    with ui.element("div").classes("hero w-full fade-in").style(f"--accent:{color}"):
         with ui.row().classes("w-full gap-6 items-stretch no-wrap max-md:flex-col relative z-[1]"):
             with ui.column().classes("flex-1 gap-4"):
                 with ui.row().classes("items-center gap-5 no-wrap"):
@@ -161,7 +162,7 @@ def _hero(result: Result) -> None:
                 with ui.column().classes("gap-2"):
                     for r in rec.reasons[:5]:
                         with ui.element("div").classes("hero-reason"):
-                            ui.icon("check_circle").classes("text-lg opacity-90 shrink-0 mt-[1px]")
+                            ui.icon("check_circle").classes("text-lg shrink-0 mt-[1px]").style(f"color:{color}")
                             ui.label(r)
             with ui.column().classes("hero-panel w-[320px] max-md:w-full gap-3 shrink-0"):
                 ui.label("Gefühlte Minuten").classes("text-sm font-semibold opacity-90")
@@ -175,9 +176,10 @@ def _hero(result: Result) -> None:
                                 ui.label(s.mode.label).classes("font-semibold")
                             ui.label(f"{s.felt_min:.0f} min" if s.available else "entfällt").classes("num font-bold")
                         width = max(4, s.felt_min / mx * 100) if s.available and mx > 0 else 0
-                        opacity = 1 if s.mode == rec.best else 0.55
+                        opacity = 1 if s.mode == rec.best else 0.45
                         theme.html(
-                            f'<div class="bar-track"><div class="bar-fill" style="width:{width:.0f}%;opacity:{opacity}"></div></div>'
+                            f'<div class="bar-track"><div class="bar-fill" style="width:{width:.0f}%;'
+                            f'background:{s.mode.color};opacity:{opacity}"></div></div>'
                         ).classes("w-full")
                 ui.label("Weniger ist besser: Reisezeit + Aufschläge + Kosten.").classes("tiny opacity-80")
 
@@ -278,14 +280,14 @@ def _weather_card(data: TravelData, result: Result) -> None:
                 {
                     "name": "Regen mm/h", "type": "bar", "yAxisIndex": 1, "barWidth": "45%",
                     "data": [h.precip_mm for h in hours],
-                    "itemStyle": {"color": "rgba(37,99,235,.45)", "borderRadius": [4, 4, 0, 0]},
+                    "itemStyle": {"color": "rgba(99,102,241,.45)", "borderRadius": [4, 4, 0, 0]},
                 },
                 {
                     "name": "Temperatur °C", "type": "line", "smooth": True, "symbol": "circle", "symbolSize": 6,
                     "data": [h.temp_c for h in hours],
-                    "lineStyle": {"width": 3, "color": "#ea580c"}, "itemStyle": {"color": "#ea580c"},
+                    "lineStyle": {"width": 3, "color": "#f59e0b"}, "itemStyle": {"color": "#f59e0b"},
                     "areaStyle": {"color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                                  "colorStops": [{"offset": 0, "color": "rgba(234,88,12,.25)"}, {"offset": 1, "color": "rgba(234,88,12,0)"}]}},
+                                  "colorStops": [{"offset": 0, "color": "rgba(245,158,11,.25)"}, {"offset": 1, "color": "rgba(245,158,11,0)"}]}},
                     "markLine": {"symbol": "none", "label": {"formatter": "Abfahrt", "color": axis, "fontSize": 11},
                                  "lineStyle": {"color": "#16a34a", "type": "dashed", "width": 1.5},
                                  "data": [{"xAxis": dep_label}]},
