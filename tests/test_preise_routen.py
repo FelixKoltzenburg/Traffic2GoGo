@@ -82,3 +82,22 @@ def test_deutschlandticket_switch_makes_trips_free():
     assert ohne.total_min == mit.total_min  # der Preis ändert nie die angezeigten Minuten
     assert any("Ticket 3,70 €" in n for n in ohne.notes)
     assert any("Deutschlandticket" in n for n in mit.notes)
+
+
+def test_brightsky_ersatz_wetter():
+    from datetime import datetime
+
+    from pendel.services.weather import parse_brightsky
+
+    data = {"weather": [
+        {"timestamp": "2026-11-18T07:00:00+01:00", "temperature": 3.0, "precipitation": 0.0,
+         "precipitation_probability": 10, "wind_speed": 12.0, "wind_gust_speed": 25.0,
+         "condition": "dry", "icon": "cloudy"},
+        {"timestamp": "2026-11-18T08:00:00+01:00", "temperature": 4.0, "precipitation": 1.5,
+         "precipitation_probability": 80, "wind_speed": 15.0, "wind_gust_speed": 30.0,
+         "condition": "rain", "icon": "rain"},
+    ]}
+    w = parse_brightsky(data, datetime(2026, 11, 18, 8, 15))
+    assert w.at_departure.time == datetime(2026, 11, 18, 8, 0)
+    assert w.at_departure.code == 63 and w.at_departure.precip_mm == 1.5
+    assert w.at_departure.apparent_c < 4.0  # Windchill

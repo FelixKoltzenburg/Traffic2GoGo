@@ -28,14 +28,23 @@ def client() -> httpx.AsyncClient:
     return _client
 
 
-async def get_json(url: str, params: dict | None = None, ttl: int = 300) -> Any:
-    """GET-Anfrage, Antwort als JSON. ``ttl`` = Sekunden, die das Ergebnis gültig bleibt."""
+async def get_json(url: str, params: dict | None = None, ttl: int = 300, stale_ok: int = 0) -> Any:
+    """GET-Anfrage, Antwort als JSON. ``ttl`` = Sekunden, die das Ergebnis gültig bleibt.
+
+    ``stale_ok``: Wenn der Dienst ausfällt (z. B. 429 „zu viele Anfragen“), darf ein
+    älteres Ergebnis bis zu so vielen Sekunden alt weiterverwendet werden.
+    """
     key = url + "?" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items()))
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
-    resp = await client().get(url, params=params)
-    resp.raise_for_status()
+    try:
+        resp = await client().get(url, params=params)
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        if hit and time.time() - hit[0] < stale_ok:
+            return hit[1]
+        raise
     data = resp.json()
     _cache[key] = (time.time(), data)
     if len(_cache) > 500:  # Speicher begrenzen: älteste Einträge entfernen

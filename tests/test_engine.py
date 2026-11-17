@@ -45,7 +45,7 @@ def fake_responses(url: str, params: dict | None):
 
 
 def test_live_pipeline(monkeypatch):
-    async def fake_get_json(url, params=None, ttl=300):
+    async def fake_get_json(url, params=None, ttl=300, stale_ok=0):
         return fake_responses(url, params)
 
     monkeypatch.setattr(http, "get_json", fake_get_json)
