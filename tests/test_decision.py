@@ -6,7 +6,7 @@ from pendel.demo import demo_data
 from pendel.models import Mode, Preferences
 from pendel.services.routing import near_line, parse_route
 from pendel.services.traffic import parse_item
-from pendel.services.transit import parse_journeys
+from pendel.services.transit import decode_polyline, parse_plan
 from pendel.services.weather import parse_weather
 from pendel.storage import default_settings
 from pendel.timeutil import next_departure
@@ -98,24 +98,66 @@ def test_parse_open_meteo():
     assert w.at_departure.precip_mm == 0.4 and w.at_departure.code == 61
 
 
-def test_parse_db_rest_journey():
+def test_parse_transitous_plan():
+    """Antwort im Format der MOTIS-API (Transitous), gekürzt auf die genutzten Felder."""
     data = {
-        "journeys": [
+        "itineraries": [
             {
+                "duration": 1560, "startTime": "2026-11-04T06:40:00Z", "endTime": "2026-11-04T07:06:00Z",
+                "transfers": 0,
                 "legs": [
-                    {"walking": True, "origin": {"name": "Zuhause"}, "destination": {"name": "Wilhelmsplatz"},
-                     "departure": "2026-11-04T07:40:00+01:00", "arrival": "2026-11-04T07:46:00+01:00"},
-                    {"line": {"name": "U2"}, "origin": {"name": "Wilhelmsplatz"}, "destination": {"name": "Stadtmitte"},
-                     "departure": "2026-11-04T07:48:00+01:00", "plannedDeparture": "2026-11-04T07:47:00+01:00",
-                     "arrival": "2026-11-04T08:02:00+01:00", "arrivalDelay": 120},
-                ]
-            }
+                    {"mode": "WALK", "from": {"name": "START", "lat": 48.80, "lon": 9.21},
+                     "to": {"name": "Wilhelmsplatz", "lat": 48.80, "lon": 9.22},
+                     "startTime": "2026-11-04T06:40:00Z", "endTime": "2026-11-04T06:46:00Z",
+                     "scheduledStartTime": "2026-11-04T06:40:00Z", "scheduledEndTime": "2026-11-04T06:46:00Z",
+                     "realTime": False, "scheduled": True, "duration": 360, "distance": 412.5,
+                     "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC", "precision": 5, "length": 2},
+                     "steps": [{"relativeDirection": "DEPART", "streetName": "Marktstraße", "distance": 120},
+                               {"relativeDirection": "LEFT", "streetName": "", "distance": 2},
+                               {"relativeDirection": "RIGHT", "streetName": "König-Karl-Straße", "distance": 290}]},
+                    {"mode": "SUBWAY", "from": {"name": "Wilhelmsplatz", "lat": 48.80, "lon": 9.22, "track": "2"},
+                     "to": {"name": "Stadtmitte", "lat": 48.77, "lon": 9.17, "scheduledTrack": "1"},
+                     "startTime": "2026-11-04T06:48:00Z", "endTime": "2026-11-04T07:02:00Z",
+                     "scheduledStartTime": "2026-11-04T06:47:00Z", "scheduledEndTime": "2026-11-04T07:00:00Z",
+                     "realTime": True, "scheduled": True, "duration": 840, "displayName": "U2",
+                     "headsign": "Hölderlinplatz", "routeColor": "e3000f", "routeTextColor": "FFFFFF",
+                     "intermediateStops": [{"name": "A", "lat": 0, "lon": 0}, {"name": "B", "lat": 0, "lon": 0}],
+                     "legGeometry": {"points": "", "precision": 6, "length": 0}},
+                    {"mode": "WALK", "from": {"name": "Stadtmitte", "lat": 48.77, "lon": 9.17},
+                     "to": {"name": "END", "lat": 48.77, "lon": 9.16},
+                     "startTime": "2026-11-04T07:02:00Z", "endTime": "2026-11-04T07:06:00Z",
+                     "scheduledStartTime": "2026-11-04T07:00:00Z", "scheduledEndTime": "2026-11-04T07:04:00Z",
+                     "realTime": False, "scheduled": True, "duration": 240, "distance": 250,
+                     "legGeometry": {"points": "", "precision": 6, "length": 0}},
+                ],
+            },
+            {   # reiner Fußweg ohne Bahn → wird nicht als Bahnverbindung gezählt
+                "duration": 4000, "startTime": "2026-11-04T06:40:00Z", "endTime": "2026-11-04T07:46:00Z",
+                "transfers": 0,
+                "legs": [{"mode": "WALK", "from": {"name": "S", "lat": 0, "lon": 0}, "to": {"name": "E", "lat": 0, "lon": 0},
+                          "startTime": "2026-11-04T06:40:00Z", "endTime": "2026-11-04T07:46:00Z",
+                          "scheduledStartTime": "2026-11-04T06:40:00Z", "scheduledEndTime": "2026-11-04T07:46:00Z",
+                          "realTime": False, "scheduled": True, "duration": 4000,
+                          "legGeometry": {"points": "", "precision": 6, "length": 0}}],
+            },
         ]
     }
-    (opt,) = parse_journeys(data)
-    assert opt.lines == ["U2"] and opt.transfers == 0 and opt.delay_min == 2
-    assert opt.duration_min == 22
+    (opt,) = parse_plan(data)
+    assert opt.lines == ["U2"] and opt.transfers == 0
+    assert opt.departure == datetime(2026, 11, 4, 7, 40)  # UTC → deutsche Zeit (Winterzeit +1 h)
+    assert opt.delay_min == 2 and opt.duration_min == 26
+    walk, ride, _ = opt.legs
+    assert walk.walking and walk.distance_m == 412.5
+    assert walk.steps == ["Losgehen auf Marktstraße (120 m)", "Rechts abbiegen auf König-Karl-Straße (290 m)"]
+    assert walk.path == [(38.5, -120.2), (40.7, -120.95)]  # Beispiel aus der Google-Polyline-Doku
+    assert ride.kind == "U" and ride.color == "#e3000f" and ride.track_from == "2" and ride.track_to == "1"
+    assert ride.headsign == "Hölderlinplatz" and ride.stops_between == 2
+    assert opt.planned_departure == datetime(2026, 11, 4, 7, 39)  # erster Zug 1 min verspätet
 
+
+def test_decode_polyline_precision():
+    assert decode_polyline({"points": "_p~iF~ps|U", "precision": 5}) == [(38.5, -120.2)]
+    assert decode_polyline({"points": "", "precision": 6}) == []
 
 def test_parse_osrm_and_autobahn_detection():
     data = {"code": "Ok", "routes": [{"distance": 15200, "duration": 1260,

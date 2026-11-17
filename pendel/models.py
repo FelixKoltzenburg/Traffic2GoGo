@@ -93,9 +93,9 @@ class Preferences:
 class Settings:
     routes: list[Route] = field(default_factory=list)
     prefs: Preferences = field(default_factory=Preferences)
-    demo_mode: bool = True
+    demo_mode: bool = False  # Standard: echte Daten. Demo nur zum Ausprobieren ohne Internet.
     demo_scenario: str = "auto"  # auto | sonne | regen | stau | bahnchaos | winter
-    transit_api_base: str = "https://v6.db.transport.rest"
+    transit_api_base: str = "https://api.transitous.org"  # freier ÖPNV-Routingdienst (MOTIS)
 
 
 # ---------------------------------------------------------------------------
@@ -132,11 +132,27 @@ class TransitLeg:
     line: str  # z. B. "S1" oder "Fußweg"
     origin: str
     destination: str
-    departure: datetime
+    departure: datetime  # tatsächliche (prognostizierte) Zeit
     arrival: datetime
-    delay_min: int = 0
+    delay_min: int = 0  # Ankunftsverspätung dieses Abschnitts
     walking: bool = False
     cancelled: bool = False
+    # --- Details für die Verbindungsansicht ---------------------------------
+    kind: str = ""  # "S", "U", "B", "R", "F" (Fernverkehr) – steuert die Farbe des Linien-Chips
+    headsign: str = ""  # Fahrtrichtung, z. B. "Vaihingen"
+    planned_departure: datetime | None = None
+    track_from: str = ""  # Gleis/Steig bei Abfahrt
+    track_to: str = ""  # Gleis/Steig bei Ankunft
+    stops_between: int = 0  # Anzahl Zwischenhalte
+    distance_m: float = 0.0  # bei Fußwegen: Länge in Metern
+    steps: list[str] = field(default_factory=list)  # bei Fußwegen: Abbiegehinweise
+    path: list[tuple[float, float]] = field(default_factory=list)  # Linienverlauf (lat, lon) für die Karte
+    color: str = ""  # Linienfarbe aus dem Fahrplan, z. B. "#1d9d4c"
+    text_color: str = ""
+
+    @property
+    def duration_min(self) -> float:
+        return (self.arrival - self.departure).total_seconds() / 60
 
 
 @dataclass
@@ -217,6 +233,7 @@ class ModeScore:
     parts: list[ScorePart] = field(default_factory=list)
     excluded_reason: str = ""
     notes: list[str] = field(default_factory=list)
+    option: TransitOption | None = None  # bei der Bahn: die gewählte Verbindung (für die Detailansicht)
 
 
 @dataclass

@@ -27,11 +27,15 @@ def fake_responses(url: str, params: dict | None):
     if "routed-bike" in url:
         return {"code": "Ok", "routes": [{"distance": 6100, "duration": 1380,
                 "geometry": {"coordinates": [[9.21, 48.80], [9.17, 48.77]]}, "legs": []}]}
-    if "/journeys" in url:
-        return {"journeys": [{"legs": [
-            {"line": {"name": "U2"}, "origin": {"name": "A"}, "destination": {"name": "B"},
-             "departure": "2026-11-04T07:50:00+01:00", "plannedDeparture": "2026-11-04T07:50:00+01:00",
-             "arrival": "2026-11-04T08:12:00+01:00", "arrivalDelay": 0}]}]}
+    if "/plan" in url:
+        return {"itineraries": [{"duration": 1320, "startTime": "2026-11-04T06:50:00Z", "endTime": "2026-11-04T07:12:00Z",
+                "transfers": 0, "legs": [
+                    {"mode": "SUBWAY", "displayName": "U2", "from": {"name": "A", "lat": 48.8, "lon": 9.2},
+                     "to": {"name": "B", "lat": 48.77, "lon": 9.17},
+                     "startTime": "2026-11-04T06:50:00Z", "endTime": "2026-11-04T07:12:00Z",
+                     "scheduledStartTime": "2026-11-04T06:50:00Z", "scheduledEndTime": "2026-11-04T07:12:00Z",
+                     "realTime": True, "scheduled": True, "duration": 1320,
+                     "legGeometry": {"points": "", "precision": 6, "length": 0}}]}]}
     if "A8/services/warning" in url:
         return {"warning": [{"coordinate": {"lat": "48.74", "long": "9.17"}, "title": "A8 | Stuttgart → Karlsruhe",
                              "subtitle": "Stau", "isBlocked": "false", "delayTimeValue": "20", "description": []}]}
@@ -79,7 +83,7 @@ def test_arrival_is_sent_to_bahn_api(monkeypatch):
     seen = {}
 
     async def fake(url, params=None, ttl=300):
-        if "/journeys" in url:
+        if "/plan" in url:
             seen.update(params)
         return fake_responses(url, params)
 
@@ -89,5 +93,45 @@ def test_arrival_is_sent_to_bahn_api(monkeypatch):
     s.demo_mode = False
     arrive = datetime(2026, 11, 4, 8, 30)
     result = asyncio.run(engine.recommend(s.routes[0], s, arrive_by=arrive))
-    assert seen["arrival"].startswith("2026-11-04T08:30") and "departure" not in seen
+    assert seen["time"].startswith("2026-11-04T08:30") and seen["arriveBy"] == "true"
     assert result.arrive_by == arrive
+
+
+def test_transitous_falls_back_to_older_api_version(monkeypatch):
+    """Kennt der Server /api/v6 noch nicht, wird automatisch /api/v5 usw. probiert."""
+    import httpx
+
+    from pendel.services import transit
+
+    calls = []
+
+    async def fake(url, params=None, ttl=300):
+        calls.append(url)
+        if "/api/v6/" in url:
+            req = httpx.Request("GET", url)
+            raise httpx.HTTPStatusError("404", request=req, response=httpx.Response(404, request=req))
+        return fake_responses(url, params)
+
+    monkeypatch.setattr("pendel.services.transit.get_json", fake)
+    transit._working_version.clear()
+    s = default_settings()
+    route = s.routes[0]
+    opts = asyncio.run(transit.fetch_journeys("https://api.transitous.org", route.origin, route.destination, DEP))
+    assert len(opts) == 1 and any("/api/v5/plan" in c for c in calls)
+    calls.clear()
+    asyncio.run(transit.fetch_journeys("https://api.transitous.org", route.origin, route.destination, DEP))
+    assert calls == ["https://api.transitous.org/api/v5/plan"]  # gemerkt, kein zweiter Fehlversuch
+
+
+def test_old_db_rest_settings_are_migrated(tmp_path, monkeypatch):
+    import json
+    from dataclasses import asdict
+
+    from pendel import storage
+
+    monkeypatch.setattr(storage, "SETTINGS_FILE", tmp_path / "settings.json")
+    raw = asdict(default_settings())
+    raw.update(demo_mode=True, transit_api_base="https://v6.db.transport.rest", user_name="Felix", ntfy_topic="x")
+    (tmp_path / "settings.json").write_text(json.dumps(raw), encoding="utf-8")
+    s = storage.load_settings()
+    assert s.transit_api_base == "https://api.transitous.org" and s.demo_mode is False

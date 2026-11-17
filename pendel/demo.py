@@ -79,7 +79,15 @@ def _weather(dep: datetime, scenario: str, rnd: random.Random) -> WeatherInfo:
 
 
 def _transit(route: Route, dep: datetime, air_km: float, scenario: str, rnd: random.Random) -> list[TransitOption]:
-    lines = [("U2", "S1"), ("U1",), ("S1", "Bus 42"), ("U2",)]
+    o, d = (route.origin.lat, route.origin.lon), (route.destination.lat, route.destination.lon)
+    # Haltestellen liegen ein Stück vom Start/Ziel entfernt auf der direkten Linie
+    stop_a = _between(o, d, 0.08)
+    stop_b = _between(o, d, 0.55)
+    stop_c = _between(o, d, 0.93)
+    lines = [(("U2", "U", "#e3000f", "Hölderlinplatz"), ("S1", "S", "#4fa832", "Herrenberg")),
+             (("U1", "U", "#e3000f", "Vaihingen"),),
+             (("S1", "S", "#4fa832", "Kirchheim (T)"), ("Bus 42", "B", "#a6338b", "Erwin-Schoettle-Platz")),
+             (("U2", "U", "#e3000f", "Botnang"),)]
     ride = air_km / 22 * 60 + 4
     options: list[TransitOption] = []
     first = dep + timedelta(minutes=rnd.randint(2, 7))
@@ -93,20 +101,36 @@ def _transit(route: Route, dep: datetime, air_km: float, scenario: str, rnd: ran
             cancelled = k in (0, 2)
         legs: list[TransitLeg] = []
         t = planned
-        legs.append(TransitLeg("Fußweg", route.origin.name, "Haltestelle", t, t + timedelta(minutes=5), walking=True))
+        legs.append(TransitLeg(
+            "Fußweg", route.origin.name, "Haltestelle Wilhelmsplatz", t, t + timedelta(minutes=5), walking=True,
+            distance_m=380, path=[o, stop_a],
+            steps=["Losgehen auf Marktstraße (120 m)", "Rechts abbiegen auf König-Karl-Straße (210 m)",
+                   "Links abbiegen auf Wilhelmsplatz (50 m)"],
+        ))
         t += timedelta(minutes=5)
         part = ride / len(chosen)
-        for j, ln in enumerate(chosen):
+        stops = [stop_a, stop_b, stop_c] if len(chosen) == 2 else [stop_a, stop_c]
+        names = ["Wilhelmsplatz", "Hauptbahnhof", "Stadtmitte"] if len(chosen) == 2 else ["Wilhelmsplatz", "Stadtmitte"]
+        for j, (ln, kind, color, head) in enumerate(chosen):
             if j:
-                t += timedelta(minutes=4)  # Umstiegszeit
-            legs.append(TransitLeg(ln, "Halt", "Halt", t, t + timedelta(minutes=part), delay_min=delay, cancelled=cancelled))
-            t += timedelta(minutes=part)
-        t += timedelta(minutes=delay)
-        legs.append(TransitLeg("Fußweg", "Haltestelle", route.destination.name, t, t + timedelta(minutes=4), walking=True))
+                legs.append(TransitLeg("Fußweg", names[j], names[j], t, t + timedelta(minutes=4), walking=True,
+                                       distance_m=150, steps=["Zum Gleis 101 (Treppe nehmen)"], path=[stops[j]]))
+                t += timedelta(minutes=4)
+            legs.append(TransitLeg(
+                ln, names[j], names[j + 1], t + timedelta(minutes=delay if j == 0 else 0),
+                t + timedelta(minutes=part + (delay if j == 0 else 0)), delay_min=delay, cancelled=cancelled,
+                kind=kind, headsign=head, planned_departure=t, track_from=str(rnd.choice([1, 2, 101, 102])),
+                track_to=str(rnd.choice([1, 2])), stops_between=max(1, int(part / 2.5)),
+                path=[stops[j], stops[j + 1]], color=color, text_color="#ffffff",
+            ))
+            t += timedelta(minutes=part + (delay if j == 0 else 0))  # Verspätung wirkt ab dem ersten Zug
+        legs.append(TransitLeg("Fußweg", "Stadtmitte", route.destination.name, t, t + timedelta(minutes=4), walking=True,
+                               distance_m=290, path=[stop_c, d],
+                               steps=["Ausgang Rotebühlplatz (Treppe nehmen)", "Geradeaus weiter auf Rotebühlplatz (240 m)"]))
         t += timedelta(minutes=4)
         options.append(
             TransitOption(
-                departure=planned + timedelta(minutes=0),
+                departure=planned,
                 arrival=t,
                 planned_departure=planned,
                 legs=legs,
@@ -115,6 +139,10 @@ def _transit(route: Route, dep: datetime, air_km: float, scenario: str, rnd: ran
             )
         )
     return options
+
+
+def _between(a: tuple[float, float], b: tuple[float, float], f: float) -> tuple[float, float]:
+    return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
 
 
 def _incidents(car_km: float, scenario: str) -> list[Incident]:

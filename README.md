@@ -36,7 +36,7 @@ pendel/
   timeutil.py            Zeitzonen-Hilfen (Europe/Berlin)
   services/              eine Datei pro API
     weather.py           Open-Meteo
-    transit.py           db.transport.rest
+    transit.py           Transitous (Bus & Bahn, MOTIS)
     routing.py           OSRM (routing.openstreetmap.de)
     traffic.py           Autobahn GmbH
     geocode.py           Photon (Adresssuche)
@@ -69,7 +69,7 @@ Wichtig für den Server:
 | Quelle | Wofür | Schlüssel nötig? |
 |---|---|---|
 | [Open-Meteo](https://open-meteo.com) | Wetter (CC BY 4.0) | nein |
-| [db.transport.rest](https://v6.db.transport.rest) | Bahn-Verbindungen, Verspätungen (max. 100 Anfragen/min) | nein |
+| [Transitous](https://transitous.org) | Bus- & Bahnverbindungen mit Echtzeit, Fußwegen und Karte (nur nichtkommerziell, sparsam abfragen, [Quellen](https://transitous.org/sources/) nennen) | nein |
 | [routing.openstreetmap.de](https://routing.openstreetmap.de) | Auto- und Radrouten (© OpenStreetMap) | nein |
 | [Autobahn-API](https://autobahn.api.bund.dev) | Staus, Sperrungen, Baustellen | nein |
 | [Photon](https://photon.komoot.io) | Adresssuche | nein |

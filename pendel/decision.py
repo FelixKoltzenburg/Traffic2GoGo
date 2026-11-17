@@ -153,6 +153,7 @@ def score_transit(
 
     assert best_opt is not None and best_parts is not None
     s.parts = best_parts
+    s.option = best_opt
     s.travel_min = best_opt.duration_min
     s.cost_eur = prefs.transit_cost_eur
     lines = " → ".join(best_opt.lines) or "Fußweg"

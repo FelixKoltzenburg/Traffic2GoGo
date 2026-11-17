@@ -48,6 +48,11 @@ def load_settings() -> Settings:
     known_prefs = Preferences.__dataclass_fields__.keys()
     prefs = Preferences(**{k: v for k, v in raw.get("prefs", {}).items() if k in known_prefs})
     other = {k: v for k, v in raw.items() if k not in ("routes", "prefs") and k in Settings.__dataclass_fields__}
+    if "transport.rest" in str(other.get("transit_api_base", "")):
+        # Einstellungen von vor dem Umstieg auf Transitous: alte (abgeschaltete) Bahn-API
+        # ersetzen und den Demo-Modus ausschalten, damit echte Verbindungen kommen.
+        other["transit_api_base"] = "https://api.transitous.org"
+        other["demo_mode"] = False
     return Settings(routes=[_route_from_dict(r) for r in raw.get("routes", [])], prefs=prefs, **other)
 
 

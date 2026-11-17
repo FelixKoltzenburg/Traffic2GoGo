@@ -10,7 +10,7 @@ from ..decision import de
 from ..engine import Result, recommend
 from ..models import ModeScore, TravelData
 from ..weather_codes import icon as wx_icon
-from . import search, theme
+from . import journey, search, theme
 
 SOURCE_NAMES = {"wetter": "Wetter", "bahn": "Bahn", "auto": "Autoroute", "rad": "Radroute", "autobahn": "Autobahn-Meldungen"}
 
@@ -197,6 +197,10 @@ def _mode_card(s: ModeScore, winner: bool, scale: float, delay: int) -> None:
             theme.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">euro</span>{de(s.cost_eur, 2)} €</span>')
         for n in s.notes[:2]:
             ui.label(n).classes("tiny muted leading-snug")
+        if s.option is not None:
+            ui.button("Verbindung ansehen", icon="route", on_click=lambda o=s.option: journey.open_journey(o)).props(
+                "flat dense no-caps"
+            ).classes("tiny self-start text-[color:var(--bahn)] -ml-1")
         with ui.expansion("Wie kommt die Zahl zustande?", icon="calculate").props("dense header-class='px-0 text-[color:var(--muted)]'").classes("w-full tiny"):
             for p in s.parts:
                 sign = "plus" if p.minutes > 0 and not p.label.startswith("Fahrzeit") else "minus" if p.minutes < 0 else ""
@@ -291,9 +295,7 @@ def _transit_card(data: TravelData, arrive_by=None) -> None:
         in_time = [o for o in options if (o.arrival - arrive_by).total_seconds() <= 60]
         options = sorted(in_time, key=lambda o: o.arrival, reverse=True) or options
     for opt in options[:4]:
-        chips = "".join(
-            f'<span class="line-chip {(_line_kind(ln))}">{_esc(ln)}</span>' for ln in opt.lines
-        ) or '<span class="muted tiny">zu Fuß</span>'
+        chips = "".join(journey.line_chip(leg) for leg in opt.legs if not leg.walking) or '<span class="muted tiny">zu Fuß</span>'
         if opt.cancelled:
             status = '<span class="pill bad">Fällt aus</span>'
         elif opt.delay_min >= 5:
@@ -303,20 +305,15 @@ def _transit_card(data: TravelData, arrive_by=None) -> None:
         else:
             status = '<span class="pill good">pünktlich</span>'
         strike = "text-decoration:line-through;opacity:.6;" if opt.cancelled else ""
-        theme.html(
+        row = theme.html(
             f'<div class="conn"><div style="{strike}"><div class="font-bold num">{opt.planned_departure:%H:%M}</div>'
             f'<div class="tiny muted num">an {opt.arrival:%H:%M}</div></div>'
             f'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;{strike}">{chips}'
             f'<span class="tiny muted">{opt.duration_min:.0f} min · {opt.transfers}× um</span></div>'
-            f"<div>{status}</div></div>"
-        ).classes("w-full")
-
-
-def _line_kind(line: str) -> str:
-    first = line.strip()[:1].upper()
-    if line.startswith("Bus"):
-        return "B"
-    return first if first in {"S", "U", "R"} else ""
+            f'<div class="conn-end">{status}<span class="material-icons conn-arrow">chevron_right</span></div></div>'
+        ).classes("w-full conn-click")
+        row.on("click", lambda opt=opt: journey.open_journey(opt))
+    ui.label("Tippe auf eine Verbindung für Details, Fußwege und Karte.").classes("tiny muted pt-1")
 
 
 def _traffic_card(data: TravelData) -> None:

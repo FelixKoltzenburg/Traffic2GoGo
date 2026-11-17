@@ -282,6 +282,6 @@ def sources_section() -> None:
         demo.on_value_change(on_demo)
         scen.on_value_change(on_scen)
 
-        api = ui.input("Bahn-API (Basis-URL)", value=s.transit_api_base).props("outlined dense").classes("w-full")
-        api.on("blur", lambda: (setattr(s, "transit_api_base", (api.value or "").strip() or "https://v6.db.transport.rest"), state.save()))
+        api = ui.input("ÖPNV-Routing (Transitous/MOTIS, Basis-URL)", value=s.transit_api_base).props("outlined dense").classes("w-full")
+        api.on("blur", lambda: (setattr(s, "transit_api_base", (api.value or "").strip() or "https://api.transitous.org"), state.save()))
 

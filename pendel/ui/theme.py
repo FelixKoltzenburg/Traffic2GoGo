@@ -115,6 +115,36 @@ body { background: var(--bg) !important; color: var(--ink);
 .seg { border: 1px solid var(--line); border-radius: 999px; }
 .route-chip { border-radius: 999px !important; color: var(--ink) !important; border-color: var(--line) !important; }
 .go-btn { height: 40px; }
+
+/* Klickbare Verbindungen */
+.conn-click { cursor: pointer; border-radius: 12px; transition: background .15s; margin: 0 -8px; padding: 0 8px;
+  width: calc(100% + 16px) !important; }
+.conn-click:hover { background: var(--soft); }
+.conn-end { display: flex; align-items: center; gap: 2px; }
+.conn-arrow { color: var(--muted); font-size: 20px; }
+
+/* Verbindungsdetails (Dialog) */
+.journey-card { border-radius: 24px !important; overflow: hidden; }
+.journey-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-top: 1px solid var(--line); }
+.journey-steps { padding: 16px 20px 20px; max-height: 62vh; overflow-y: auto; }
+.journey-map { height: 100%; min-height: 420px; border-left: 1px solid var(--line); }
+@media (max-width: 700px) {
+  .journey-body { grid-template-columns: 1fr; }
+  .journey-map { min-height: 260px; border-left: 0; border-top: 1px solid var(--line); }
+}
+.jleg { display: grid; grid-template-columns: 46px 16px minmax(0, 1fr); column-gap: 10px; align-items: start; }
+.jtime { font-weight: 700; font-size: .9rem; text-align: right; padding-top: 1px; }
+.jdot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--line-c, var(--muted));
+  background: var(--card); justify-self: center; margin-top: 3px; }
+.jbar { width: 4px; background: var(--line-c, var(--muted)); justify-self: center; min-height: 54px; border-radius: 2px; }
+.jbar.dotted { background: none; width: 0; border-left: 3px dotted var(--muted); min-height: 36px; }
+.jtext { font-size: .9rem; padding-bottom: 2px; min-width: 0; }
+.jmid { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; align-self: center; }
+.jmid .tiny { flex-basis: 100%; }
+.track { font-size: .72rem; font-weight: 600; padding: 1px 6px; border-radius: 6px; background: var(--soft);
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.walk-exp .q-item { padding: 2px 0; min-height: 32px; font-size: .82rem; color: var(--muted); }
+.walk-exp .q-expansion-item__content { padding-left: 8px; }
 """
 
 
@@ -176,7 +206,7 @@ def frame(active: str):
             'Wetter: <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> (CC BY 4.0) · '
             'Routing: <a href="https://routing.openstreetmap.de" target="_blank">FOSSGIS-OSRM</a>, '
             '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>-Mitwirkende · '
-            'Bahn: <a href="https://v6.db.transport.rest" target="_blank">db.transport.rest</a> · '
+            'Bahn &amp; Bus: <a href="https://transitous.org/sources/" target="_blank">Transitous</a> · '
             'Verkehr: <a href="https://autobahn.api.bund.dev" target="_blank">Autobahn GmbH</a>'
             "</div>"
         )

@@ -10,7 +10,9 @@ from typing import Any
 
 import httpx
 
-USER_AGENT = "PendelBerater/1.0 (privates Lernprojekt; Python/httpx)"
+# Viele freie APIs (z. B. Transitous, OpenStreetMap-Dienste) verlangen einen
+# User-Agent mit App-Name, Version und Kontaktmöglichkeit.
+USER_AGENT = "Traffic2GoGo/1.0 (Studienprojekt DHBW; https://github.com/FelixKoltzenburg/Test)"
 _client: httpx.AsyncClient | None = None
 _cache: dict[str, tuple[float, Any]] = {}
 
