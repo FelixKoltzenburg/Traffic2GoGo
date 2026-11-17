@@ -1,18 +1,21 @@
-"""Entscheidungslogik: Welches Verkehrsmittel ist heute das beste?
+"""Entscheidungslogik: Welches Verkehrsmittel bringt dich am schnellsten ans Ziel?
 
-Idee: „gefühlte Minuten“ (in der Verkehrsplanung heißt das *generalisierte
-Kosten*). Alles wird in Minuten umgerechnet und addiert:
+Gezählt werden nur **echte Minuten von Tür zu Tür** – keine Umrechnung von Geld
+in Zeit und keine künstlichen Aufschläge:
 
-    gefühlte Minuten = Reisezeit
-                     + Aufschläge (Regen, Kälte, Umstiege, Stau, Parksuche …)
-                     + Kosten in Minuten (Euro ÷ Wert deiner Zeit)
-                     − Boni (z. B. Bewegung beim Radfahren)
+* **Rad:** Fahrzeit laut Routing (angepasst an dein Tempo).
+* **Bahn:** Abfahrt-Modus: Warten bis zur Abfahrt + Fahrzeit inkl. Fußwegen,
+  also die Zeit bis zur Ankunft. Ankunft-Modus: die Fahrzeit der spätesten
+  Verbindung, die noch rechtzeitig ankommt. Verspätungen stecken schon in den
+  Echtzeitdaten.
+* **Auto:** Fahrzeit + Berufsverkehr + Staus/Sperrungen + Parkplatzsuche.
 
-Das Verkehrsmittel mit den wenigsten gefühlten Minuten gewinnt. Bestimmte
-Bedingungen schließen ein Verkehrsmittel ganz aus (z. B. Gewitter beim Rad).
+Die kürzeste Zeit gewinnt. Das Wetter verändert keine Minuten, sondern schließt
+das Rad bei Gewitter, Glätte, starkem Regen, Sturm oder Kälte aus. Kosten werden
+angezeigt, fließen aber nicht in die Entscheidung ein.
 
 Jede Zahl wird als ``ScorePart`` gespeichert. So kann die Oberfläche genau
-zeigen, *warum* die App sich entschieden hat.
+zeigen, wie die Zeit zustande kommt.
 """
 from __future__ import annotations
 
@@ -35,7 +38,7 @@ def de(x: float, digits: int = 1) -> str:
     """Zahl mit deutschem Dezimalkomma, z. B. 1,6."""
     return f"{x:.{digits}f}".replace(".", ",")
 
-CLEAR_MARGIN_MIN = 5.0  # ab diesem Vorsprung gilt die Empfehlung als „klar“
+CLEAR_MARGIN_MIN = 5.0  # ab 5 Minuten Vorsprung gilt die Empfehlung als „klar“
 
 
 def is_rush_hour(dt: datetime) -> bool:
@@ -45,8 +48,11 @@ def is_rush_hour(dt: datetime) -> bool:
     return time(6, 30) <= t <= time(9, 0) or time(16, 0) <= t <= time(18, 30)
 
 
-def _money_to_min(eur: float, prefs: Preferences) -> float:
-    return eur / max(prefs.value_of_time_eur_h, 1.0) * 60
+def _fare(opt, prefs: Preferences) -> float:
+    """Ticketpreis einer Verbindung: 0 € mit Deutschlandticket, sonst der geschätzte Preis."""
+    if prefs.has_deutschlandticket:
+        return 0.0
+    return opt.fare_eur or 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -61,14 +67,8 @@ def score_bike(data: TravelData, prefs: Preferences, arrive_by: datetime | None 
     if data.bike.distance_km > prefs.bike_max_km:
         return _excluded(s, f"{de(data.bike.distance_km)} km sind mehr als dein Maximum von {prefs.bike_max_km:.0f} km")
 
-    travel = data.bike.duration_min * prefs.bike_speed_factor
-    s.travel_min = travel
-    s.parts.append(ScorePart("Fahrzeit", travel))
-
     w: HourWeather | None = data.weather.at_departure if data.weather else None
-    if w is None:
-        s.notes.append("Ohne Wetterdaten bewertet")
-    else:
+    if w is not None:
         if w.code in THUNDER:
             return _excluded(s, "Gewitter angesagt")
         if w.code in ICE_OR_SNOW or (w.temp_c <= 0.5 and w.precip_mm > 0):
@@ -80,19 +80,20 @@ def score_bike(data: TravelData, prefs: Preferences, arrive_by: datetime | None 
         if w.gusts_kmh > prefs.bike_max_gusts_kmh:
             return _excluded(s, f"Sturmböen bis {w.gusts_kmh:.0f} km/h")
 
-        if w.precip_mm >= 0.1:
-            s.parts.append(ScorePart(f"Regen {de(w.precip_mm)} mm/h", w.precip_mm * prefs.bike_rain_penalty_min_per_mm))
-        if w.precip_prob >= 40:
-            s.parts.append(ScorePart(f"Regenrisiko {w.precip_prob} %", (w.precip_prob - 40) / 60 * 4))
-        if w.apparent_c < prefs.bike_cold_below_c:
-            s.parts.append(ScorePart(f"Kälte (gefühlt {w.apparent_c:.0f} °C)", (prefs.bike_cold_below_c - w.apparent_c) * 0.6))
-        if w.wind_kmh > 20:
-            s.parts.append(ScorePart(f"Wind {w.wind_kmh:.0f} km/h", (w.wind_kmh - 20) * 0.25))
-        s.notes.append(f"{describe(w.code)}, {w.temp_c:.0f} °C")
+    travel = data.bike.duration_min * prefs.bike_speed_factor
+    s.parts.append(ScorePart("Fahrzeit", travel))
+    s.travel_min = travel
 
-    if prefs.bike_sport_bonus_min:
-        s.parts.append(ScorePart("Bonus: Bewegung", -prefs.bike_sport_bonus_min))
-    s.notes.append(f"{de(data.bike.distance_km)} km, ca. {travel:.0f} min")
+    if w is None:
+        s.notes.append("Ohne Wetterdaten bewertet")
+    else:
+        weather = f"{describe(w.code)}, {w.temp_c:.0f} °C"
+        if w.precip_mm >= 0.1:
+            weather += f", Regen {de(w.precip_mm)} mm/h"
+        elif w.precip_prob >= 40:
+            weather += f", Regenrisiko {w.precip_prob} %"
+        s.notes.append(weather)
+    s.notes.append(f"{de(data.bike.distance_km)} km")
     if data.bike.estimated:
         s.notes.append("Strecke nur geschätzt (Routing nicht erreichbar)")
     if arrive_by:
@@ -108,11 +109,12 @@ def score_bike(data: TravelData, prefs: Preferences, arrive_by: datetime | None 
 def score_transit(
     data: TravelData, prefs: Preferences, departure: datetime, arrive_by: datetime | None = None
 ) -> ModeScore:
-    """Bewertet die beste Bahnverbindung.
+    """Wählt die beste Bahnverbindung und zählt ihre echten Minuten.
 
-    Abfahrt-Modus: Verbindungen ab ``departure``; Warten bis zur Abfahrt zählt halb.
-    Ankunft-Modus (``arrive_by``): Verbindungen, die rechtzeitig ankommen; zu früh
-    am Ziel zu sein zählt halb.
+    Abfahrt-Modus: die Verbindung mit der frühesten Ankunft; gezählt wird die Zeit
+    von der Wunsch-Abfahrt bis zur Ankunft (Warten + Fahrt).
+    Ankunft-Modus: die spätestmögliche Verbindung, die noch rechtzeitig ankommt
+    (wie in der DB-App); gezählt wird ihre Fahrzeit.
     """
     s = ModeScore(Mode.TRANSIT, available=True)
     if not data.transit:
@@ -123,43 +125,31 @@ def score_transit(
         candidates = [o for o in usable if (o.arrival - arrive_by).total_seconds() <= 60]
         if not candidates:
             return _excluded(s, f"Keine Verbindung kommt bis {arrive_by:%H:%M} an")
+        opt = max(candidates, key=lambda o: (o.departure, -o.duration_min))  # so spät wie möglich los
+        s.parts.append(ScorePart("Fahrzeit inkl. Fußwege", opt.duration_min))
     else:
         candidates = [o for o in usable if (o.departure - departure).total_seconds() > -120]
         if not candidates:
             return _excluded(s, "Alle passenden Verbindungen fallen aus")
+        opt = min(candidates, key=lambda o: (o.arrival, o.duration_min))  # so früh wie möglich da
+        wait = max(0.0, (opt.departure - departure).total_seconds() / 60)
+        if wait >= 1:
+            s.parts.append(ScorePart(f"Warten bis {opt.departure:%H:%M}", wait))
+        s.parts.append(ScorePart("Fahrzeit inkl. Fußwege", opt.duration_min))
 
-    best_parts: list[ScorePart] | None = None
-    best_total = float("inf")
-    best_opt = None
-    for opt in candidates:
-        parts = [ScorePart("Fahrzeit inkl. Fußwege", opt.duration_min)]
-        if arrive_by:
-            early = max(0.0, (arrive_by - opt.arrival).total_seconds() / 60)
-            if early >= 1:
-                parts.append(ScorePart(f"{early:.0f} min zu früh am Ziel (halb gewertet)", early * 0.5))
-        else:
-            wait = max(0.0, (opt.departure - departure).total_seconds() / 60)
-            if wait >= 1:
-                parts.append(ScorePart(f"Warten bis {opt.departure:%H:%M} (halb gewertet)", wait * 0.5))
-        if opt.transfers:
-            parts.append(ScorePart(f"{opt.transfers}× Umsteigen", opt.transfers * prefs.transit_transfer_penalty_min))
-        if opt.delay_min >= 3:
-            parts.append(ScorePart(f"Unsicherheit ({opt.delay_min} min Verspätung)", opt.delay_min * prefs.transit_delay_risk_factor))
-        if prefs.transit_cost_eur > 0:
-            parts.append(ScorePart(f"Ticket {de(prefs.transit_cost_eur, 2)} €", _money_to_min(prefs.transit_cost_eur, prefs)))
-        total = sum(p.minutes for p in parts)
-        if total < best_total:
-            best_total, best_parts, best_opt = total, parts, opt
-
-    assert best_opt is not None and best_parts is not None
-    s.parts = best_parts
-    s.option = best_opt
-    s.travel_min = best_opt.duration_min
-    s.cost_eur = prefs.transit_cost_eur
-    lines = " → ".join(best_opt.lines) or "Fußweg"
-    s.notes.append(f"{best_opt.departure:%H:%M} ab, {best_opt.arrival:%H:%M} an · {lines}")
-    if best_opt.delay_min >= 3:
-        s.notes.append(f"aktuell +{best_opt.delay_min} min")
+    s.option = opt
+    s.travel_min = opt.duration_min
+    s.cost_eur = _fare(opt, prefs)
+    lines = " → ".join(opt.lines) or "Fußweg"
+    s.notes.append(f"{opt.departure:%H:%M} ab, {opt.arrival:%H:%M} an · {lines}")
+    if prefs.has_deutschlandticket:
+        s.notes.append("Mit Deutschlandticket: 0 € pro Fahrt")
+    elif opt.fare_eur:
+        s.notes.append(f"Ticket {de(opt.fare_eur, 2)} € – {opt.fare_label}")
+    if opt.transfers:
+        s.notes.append(f"{opt.transfers}× umsteigen")
+    if opt.delay_min >= 3:
+        s.notes.append(f"aktuell +{opt.delay_min} min (schon eingerechnet)")
     cancelled = sum(1 for o in data.transit if o.cancelled)
     if cancelled:
         s.notes.append(f"{cancelled} Verbindung(en) fallen aus")
@@ -180,13 +170,10 @@ def score_car(
 
     base = data.car.duration_min
     s.parts.append(ScorePart("Fahrzeit ohne Verkehr", base))
-    travel = base
     # Bei Ankunftswunsch zählt, ob die Fahrt selbst in den Berufsverkehr fällt
     start = arrive_by - timedelta(minutes=base * prefs.rush_hour_factor) if arrive_by else departure
     if is_rush_hour(start) or (arrive_by is not None and is_rush_hour(arrive_by)):
-        extra = base * (prefs.rush_hour_factor - 1)
-        s.parts.append(ScorePart("Berufsverkehr", extra))
-        travel += extra
+        s.parts.append(ScorePart("Berufsverkehr", base * (prefs.rush_hour_factor - 1)))
 
     inc_min = 0.0
     for inc in data.incidents:
@@ -197,29 +184,23 @@ def score_car(
         else:
             inc_min += inc.delay_min or prefs.incident_default_delay_min
     if inc_min:
-        n = len(data.incidents)
         roads = ", ".join(sorted({i.road for i in data.incidents}))
-        s.parts.append(ScorePart(f"{n} Meldung(en) auf {roads}", inc_min))
-        travel += inc_min
+        s.parts.append(ScorePart(f"{len(data.incidents)} Meldung(en) auf {roads}", inc_min))
 
     w = data.weather.at_departure if data.weather else None
     if w and (w.code in ICE_OR_SNOW or (w.temp_c <= 0.5 and w.precip_mm > 0)):
-        s.parts.append(ScorePart("Glätte", base * 0.25))
-        travel += base * 0.25
+        s.parts.append(ScorePart("Langsamer wegen Glätte", base * 0.25))
     elif w and w.precip_mm >= 2:
-        s.parts.append(ScorePart("Starkregen", base * 0.1))
-        travel += base * 0.1
+        s.parts.append(ScorePart("Langsamer wegen Starkregen", base * 0.1))
 
     if prefs.parking_search_min:
         s.parts.append(ScorePart("Parkplatzsuche", prefs.parking_search_min))
-        travel += prefs.parking_search_min
 
+    travel = sum(p.minutes for p in s.parts)
     fuel = data.car.distance_km * prefs.consumption_l_100km / 100 * prefs.fuel_price_eur_l
-    cost = fuel + prefs.parking_cost_eur
-    s.cost_eur = cost
-    s.parts.append(ScorePart(f"Kosten {de(cost, 2)} €", _money_to_min(cost, prefs)))
+    s.cost_eur = fuel + prefs.parking_cost_eur
     s.travel_min = travel
-    s.notes.append(f"{de(data.car.distance_km)} km, ca. {travel:.0f} min, {de(cost, 2)} €")
+    s.notes.append(f"{de(data.car.distance_km)} km, Sprit{' + Parken' if prefs.parking_cost_eur else ''} ca. {de(s.cost_eur, 2)} €")
     if data.car.estimated:
         s.notes.append("Strecke nur geschätzt (Routing nicht erreichbar)")
     if arrive_by:
@@ -247,37 +228,64 @@ def evaluate(
     if Mode.CAR.value in route.modes:
         scores.append(score_car(data, prefs, departure, arrive_by))
 
-    ranked = sorted((s for s in scores if s.available), key=lambda s: s.felt_min)
-    if not ranked:
+    available = [s for s in scores if s.available]
+    if not available:
         return Recommendation(None, scores, "Keine Empfehlung möglich", ["Für keine Option liegen genug Daten vor."], "keine")
 
-    best = ranked[0]
+    # Abwägung Zeit gegen Geld – NUR für die Empfehlung. Die angezeigten Minuten
+    # bleiben echte Reisezeit. Dein „Zeitwert“ (Einstellungen) sagt, wie viel Euro
+    # dir eine Stunde wert ist: Bei 12 €/h lohnt es sich, für 1 € mehr bis zu
+    # 5 Minuten schneller zu sein.
+    vot = max(prefs.value_of_time_eur_h, 1.0)
+
+    def balance(s: ModeScore) -> float:
+        return s.total_min + s.cost_eur / vot * 60
+
+    best = min(available, key=balance)
+    fastest = min(available, key=lambda s: s.total_min)
+    others = sorted((s for s in available if s is not best), key=balance)
+
     reasons: list[str] = []
     margin = 0.0
-    if len(ranked) > 1:
-        second = ranked[1]
-        margin = second.felt_min - best.felt_min
-        if margin < 1:
-            reasons.append(f"Praktisch gleichauf mit {second.mode.label}")
-        else:
-            reasons.append(f"Gefühlt {_fmt(margin)} min besser als {second.mode.label}")
+    if others:
+        runner_up = others[0]
+        margin = balance(runner_up) - balance(best)
+        reasons.append(_compare(best, runner_up))
+        if fastest is not best and fastest is not runner_up:
+            reasons.append(_compare(best, fastest))
     else:
         reasons.append("Die einzige Option, die heute in Frage kommt")
 
     reasons.extend(best.notes[:2])
     for other in scores:
-        if other is best:
-            continue
-        if not other.available:
+        if other is not best and not other.available:
             reasons.append(f"{other.mode.label}: {other.excluded_reason}")
-        else:
-            worst = max((p for p in other.parts if p.minutes > 0 and not p.label.startswith("Fahrzeit")), key=lambda p: p.minutes, default=None)
-            if worst and worst.minutes >= 3:
-                reasons.append(f"{other.mode.label}: {worst.label} (+{_fmt(worst.minutes)} min)")
 
-    confidence = "klar" if margin >= CLEAR_MARGIN_MIN or len(ranked) == 1 else "knapp"
-    headline = f"{best.mode.label}"
-    return Recommendation(best.mode, scores, headline, reasons, confidence, margin)
+    confidence = "klar" if margin >= CLEAR_MARGIN_MIN or not others else "knapp"
+    return Recommendation(best.mode, scores, best.mode.label, reasons, confidence, margin)
+
+
+def _compare(best: ModeScore, other: ModeScore) -> str:
+    """Ein Satz, der Zeit und Geld gegenüberstellt, z. B.
+    „3 min langsamer als Auto, aber 1,20 € günstiger“."""
+    # mit den gerundeten Minuten rechnen, die auch in der App angezeigt werden
+    dt = round(other.total_min) - round(best.total_min)  # > 0: best ist schneller
+    dc = round(other.cost_eur, 2) - round(best.cost_eur, 2)  # > 0: best ist günstiger
+    name = other.mode.label
+    t = f"{abs(dt):.0f} min"
+    c = f"{de(abs(dc), 2)} €"
+    if abs(dt) < 1 and abs(dc) < 0.05:
+        return f"Gleichauf mit {name}"
+    if abs(dt) < 1:
+        return f"Genauso schnell wie {name}, aber {c} günstiger" if dc > 0 else f"Genauso schnell wie {name}"
+    if dt > 0 and dc >= 0.05:
+        return f"{t} schneller als {name} und {c} günstiger"
+    if dt > 0 and dc <= -0.05:
+        return f"{t} schneller als {name} – kostet {c} mehr, das lohnt sich"
+    if dt > 0:
+        return f"{t} schneller als {name}"
+    # best ist langsamer, gewinnt also über den Preis
+    return f"{t} langsamer als {name}, spart aber {c}"
 
 
 def _excluded(s: ModeScore, reason: str) -> ModeScore:
@@ -288,7 +296,7 @@ def _excluded(s: ModeScore, reason: str) -> ModeScore:
 
 
 def _finish(s: ModeScore) -> ModeScore:
-    s.felt_min = sum(p.minutes for p in s.parts)
+    s.total_min = sum(p.minutes for p in s.parts)
     return s
 
 

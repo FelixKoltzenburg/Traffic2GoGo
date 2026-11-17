@@ -25,9 +25,10 @@ def test_sunny_day_prefers_bike_on_short_route():
     assert rec_for("sonne").best == Mode.BIKE
 
 
-def test_rain_rules_out_or_penalises_bike():
+def test_rain_rules_out_bike():
     r = rec_for("regen")
-    assert r.best != Mode.BIKE
+    bike = next(s for s in r.scores if s.mode == Mode.BIKE)
+    assert not bike.available and "Regen" in bike.excluded_reason
 
 
 def test_winter_excludes_bike():
@@ -44,7 +45,7 @@ def test_rail_chaos_pushes_away_from_transit():
 def test_traffic_jam_penalises_car():
     calm = next(s for s in rec_for("bahnchaos", LONG).scores if s.mode == Mode.CAR)
     jam = next(s for s in rec_for("stau", LONG).scores if s.mode == Mode.CAR)
-    assert jam.felt_min > calm.felt_min + 15
+    assert jam.total_min > calm.total_min + 15
 
 
 def test_long_route_exceeds_bike_limit():
@@ -54,10 +55,10 @@ def test_long_route_exceeds_bike_limit():
     assert not bike.available and "Maximum" in bike.excluded_reason
 
 
-def test_felt_minutes_are_sum_of_parts():
+def test_minutes_are_sum_of_parts():
     for s in rec_for("regen").scores:
         if s.available:
-            assert abs(s.felt_min - sum(p.minutes for p in s.parts)) < 1e-9
+            assert abs(s.total_min - sum(p.minutes for p in s.parts)) < 1e-9
 
 
 def test_disabled_mode_is_not_scored():
@@ -215,3 +216,38 @@ def test_arrive_by_without_any_train_in_time():
     r = evaluate(ROUTE, Preferences(), data, arrive, arrive_by=arrive)
     bahn = next(s for s in r.scores if s.mode == Mode.TRANSIT)
     assert not bahn.available and "06:00" in bahn.excluded_reason
+
+
+# --- Echte Minuten + Abwägung Zeit/Geld nur in der Empfehlung --------------
+
+
+def test_minutes_contain_no_money():
+    """Die Minuten sind reine Reisezeit – kein Teil enthält Euro."""
+    for scen in ("sonne", "stau", "bahnchaos"):
+        for s in rec_for(scen, LONG).scores:
+            assert all("€" not in p.label for p in s.parts)
+
+
+def _score(mode, minutes, cost):
+    from pendel.models import ModeScore, ScorePart
+
+    s = ModeScore(mode, available=True, total_min=minutes, travel_min=minutes, cost_eur=cost)
+    s.parts = [ScorePart("Fahrzeit", minutes)]
+    return s
+
+
+def test_tradeoff_slower_but_much_cheaper_wins(monkeypatch):
+    import pendel.decision as d
+
+    fast_car = _score(Mode.CAR, 20, 6.00)  # 3 min schneller, aber 6 € teurer
+    bike = _score(Mode.BIKE, 23, 0.00)
+    monkeypatch.setattr(d, "score_car", lambda *a, **k: fast_car)
+    monkeypatch.setattr(d, "score_bike", lambda *a, **k: bike)
+    monkeypatch.setattr(d, "score_transit", lambda *a, **k: _score(Mode.TRANSIT, 60, 0))
+    r = d.evaluate(ROUTE, Preferences(value_of_time_eur_h=12), demo_data(ROUTE, DEP, "sonne"), DEP)
+    assert r.best == Mode.BIKE
+    assert r.reasons[0] == "3 min langsamer als Auto, spart aber 6,00 €"
+    assert bike.total_min == 23 and fast_car.total_min == 20  # angezeigte Minuten bleiben echt
+    # wer seine Zeit sehr hoch bewertet, bekommt das schnellere Auto
+    r2 = d.evaluate(ROUTE, Preferences(value_of_time_eur_h=200), demo_data(ROUTE, DEP, "sonne"), DEP)
+    assert r2.best == Mode.CAR and r2.reasons[0].startswith("3 min schneller als Rad – kostet 6,00 € mehr")

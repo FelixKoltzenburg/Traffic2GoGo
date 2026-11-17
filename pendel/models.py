@@ -62,23 +62,19 @@ class Route:
 class Preferences:
     """Persönliche Vorlieben – sie steuern die Entscheidungslogik."""
 
-    # Was ist dir eine Stunde Zeit wert? Damit werden Euro in Minuten umgerechnet.
+    # Abwägung Zeit gegen Geld bei der Empfehlung: Was ist dir eine Stunde wert?
+    # (Die angezeigten Fahrzeiten bleiben echte Minuten.)
     value_of_time_eur_h: float = 12.0
 
     # Rad
     bike_max_km: float = 15.0
     bike_min_temp_c: float = 2.0
-    bike_max_rain_mm: float = 2.0  # mm pro Stunde, darüber kein Rad
+    bike_max_rain_mm: float = 0.5  # mm pro Stunde, darüber kein Rad (0,5 = mehr als Nieselregen)
     bike_max_gusts_kmh: float = 55.0
-    bike_rain_penalty_min_per_mm: float = 10.0
-    bike_cold_below_c: float = 8.0
-    bike_sport_bonus_min: float = 5.0  # Bewegung zählt als Pluspunkt
     bike_speed_factor: float = 1.0  # <1 = du fährst schneller als das Routing annimmt
 
     # Bahn
-    transit_cost_eur: float = 0.0  # 0 = Deutschlandticket o. ä. (keine Zusatzkosten)
-    transit_transfer_penalty_min: float = 4.0
-    transit_delay_risk_factor: float = 0.5  # Aufschlag für Unsicherheit bei Verspätungen
+    has_deutschlandticket: bool = False  # an = Bahnfahren kostet 0 €, aus = echten Ticketpreis schätzen
 
     # Auto
     fuel_price_eur_l: float = 1.75
@@ -163,6 +159,8 @@ class TransitOption:
     legs: list[TransitLeg]
     delay_min: int = 0  # Ankunftsverspätung
     cancelled: bool = False
+    fare_eur: float | None = None  # EinzelTicket-Preis (ohne Deutschlandticket)
+    fare_label: str = ""  # Woher der Preis stammt, z. B. "VVS EinzelTicket, 2 Zonen (geschätzt)"
 
     @property
     def duration_min(self) -> float:
@@ -227,7 +225,7 @@ class ScorePart:
 class ModeScore:
     mode: Mode
     available: bool
-    felt_min: float = 0.0  # „gefühlte Minuten“ – kleiner ist besser
+    total_min: float = 0.0  # echte Reisezeit von Tür zu Tür in Minuten
     travel_min: float = 0.0  # echte Reisezeit
     cost_eur: float = 0.0
     parts: list[ScorePart] = field(default_factory=list)

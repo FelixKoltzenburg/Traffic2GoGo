@@ -28,7 +28,7 @@ pytest -q
 main.py                  Startdatei (Webserver, Login, Scheduler)
 pendel/
   models.py              Datenmodelle (dataclasses)
-  decision.py            Entscheidungslogik („gefühlte Minuten“)
+  decision.py            Entscheidungslogik (echte Reisezeit, Abwägung Zeit/Geld)
   engine.py              holt alle Daten parallel und ruft die Logik auf
   demo.py                Demo-Daten und Szenarien
   scheduler.py           Morgen-Job: Empfehlung im Verlauf speichern
@@ -37,6 +37,7 @@ pendel/
   services/              eine Datei pro API
     weather.py           Open-Meteo
     transit.py           Transitous (Bus & Bahn, MOTIS)
+    fares.py             Ticketpreise (VVS-Zonen, Deutschlandticket)
     routing.py           OSRM (routing.openstreetmap.de)
     traffic.py           Autobahn GmbH
     geocode.py           Photon (Adresssuche)
@@ -72,6 +73,7 @@ Wichtig für den Server:
 | [Transitous](https://transitous.org) | Bus- & Bahnverbindungen mit Echtzeit, Fußwegen und Karte (nur nichtkommerziell, sparsam abfragen, [Quellen](https://transitous.org/sources/) nennen) | nein |
 | [routing.openstreetmap.de](https://routing.openstreetmap.de) | Auto- und Radrouten (© OpenStreetMap) | nein |
 | [Autobahn-API](https://autobahn.api.bund.dev) | Staus, Sperrungen, Baustellen | nein |
+| [VVS-Preise](https://www.vvs.de/tickets-und-abos/einzelticket) | EinzelTicket-Preise je Zone (in `fares.py` hinterlegt, Zonen geschätzt) | nein |
 | [Photon](https://photon.komoot.io) | Adresssuche | nein |
 
 Alle Dienste sind kostenlos, aber freiwillig betrieben. Die App fragt sparsam ab (Cache) und funktioniert

@@ -187,24 +187,18 @@ def _time_input(label: str, value: str):
 # ---------------------------------------------------------------------------
 
 PREF_GROUPS = [
-    ("Allgemein", "tune", "#64748b", [
-        ("value_of_time_eur_h", "Wert deiner Zeit", "€/h", 0, 50, 1, "Damit werden Kosten in Minuten umgerechnet."),
+    ("Zeit oder Geld?", "balance", "#64748b", [
+        ("value_of_time_eur_h", "Was ist dir eine Stunde wert?", "€/h", 1, 50, 1,
+         "Nur für die Empfehlung: Lohnt es sich, für weniger Geld etwas länger unterwegs zu sein? "
+         "Die angezeigten Fahrzeiten bleiben echte Minuten."),
     ]),
-    ("Rad", "directions_bike", "#16a34a", [
+    ("Rad", "directions_bike", "#10b981", [
         ("bike_max_km", "Maximale Strecke", "km", 1, 40, 0.5, "Darüber wird das Rad nicht vorgeschlagen."),
         ("bike_min_temp_c", "Mindesttemperatur", "°C", -10, 15, 1, "Darunter kein Rad."),
         ("bike_max_rain_mm", "Maximaler Regen", "mm/h", 0, 10, 0.1, "Darüber kein Rad."),
-        ("bike_rain_penalty_min_per_mm", "Aufschlag je mm Regen", "min", 0, 30, 1, "Wie schlimm ist Nieselregen für dich?"),
-        ("bike_cold_below_c", "Kälte-Aufschlag unter", "°C", -5, 20, 1, "Ab hier wird es unangenehm."),
-        ("bike_sport_bonus_min", "Bonus für Bewegung", "min", 0, 20, 1, "Sport zählt als Pluspunkt."),
         ("bike_speed_factor", "Tempo-Faktor", "×", 0.6, 1.5, 0.05, "< 1 = du fährst schneller als das Routing annimmt."),
     ]),
-    ("Bahn", "train", "#2563eb", [
-        ("transit_cost_eur", "Ticketpreis pro Fahrt", "€", 0, 15, 0.1, "0 bei Deutschlandticket."),
-        ("transit_transfer_penalty_min", "Aufschlag je Umstieg", "min", 0, 15, 1, ""),
-        ("transit_delay_risk_factor", "Gewicht von Verspätungen", "×", 0, 2, 0.1, "Verspätung macht weitere unsicher."),
-    ]),
-    ("Auto", "directions_car", "#ea580c", [
+    ("Auto", "directions_car", "#f59e0b", [
         ("fuel_price_eur_l", "Spritpreis", "€/l", 1, 3, 0.01, ""),
         ("consumption_l_100km", "Verbrauch", "l/100 km", 3, 15, 0.1, ""),
         ("parking_cost_eur", "Parkkosten am Ziel", "€", 0, 30, 0.5, ""),

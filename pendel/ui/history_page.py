@@ -61,8 +61,8 @@ def content() -> None:
     axis, grid = "#94a3b8", ("#243049" if dark else "#eef1f6")
     days = sorted({e["date"] for e in entries})[-30:]
     with ui.column().classes("card w-full gap-2"):
-        ui.label("Gefühlte Minuten pro Tag").classes("h-title")
-        ui.label("Je niedriger, desto besser. Die Empfehlung ist jeweils der tiefste Punkt.").classes("tiny muted")
+        ui.label("Reisezeit pro Tag").classes("h-title")
+        ui.label("Echte Minuten von Tür zu Tür je Verkehrsmittel.").classes("tiny muted")
         route_id = entries[-1]["route_id"]
         sel = [e for e in entries if e["route_id"] == route_id and e["date"] in days]
         series = []

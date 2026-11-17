@@ -100,7 +100,7 @@ def _render(result: Result) -> None:
     _hero(result)
 
     available = [s for s in rec.scores if s.available]
-    worst = max((s.felt_min for s in available), default=1)
+    worst = max((s.total_min for s in available), default=1)
     with ui.element("div").classes("w-full grid gap-5 grid-cols-1 md:grid-cols-3 items-start"):
         for i, s in enumerate(rec.scores):
             _mode_card(s, winner=(s.mode == rec.best), scale=worst, delay=i + 1)
@@ -147,23 +147,29 @@ def _hero(result: Result) -> None:
                             ui.icon("check_circle").classes("text-lg shrink-0 mt-[1px]").style(f"color:{color}")
                             ui.label(r)
             with ui.column().classes("hero-panel w-[320px] max-md:w-full gap-3 shrink-0"):
-                ui.label("Gefühlte Minuten").classes("text-sm font-semibold opacity-90")
+                ui.label("Reisezeit & Kosten").classes("text-sm font-semibold opacity-90")
                 avail = [s for s in rec.scores if s.available]
-                mx = max((s.felt_min for s in avail), default=1)
-                for s in sorted(rec.scores, key=lambda x: (not x.available, x.felt_min)):
+                mx = max((s.total_min for s in avail), default=1)
+                for s in sorted(rec.scores, key=lambda x: (not x.available, x.total_min)):
                     with ui.column().classes("w-full gap-1"):
                         with ui.row().classes("w-full justify-between items-center"):
                             with ui.row().classes("items-center gap-2"):
                                 ui.icon(s.mode.icon).classes("text-lg")
                                 ui.label(s.mode.label).classes("font-semibold")
-                            ui.label(f"{s.felt_min:.0f} min" if s.available else "entfällt").classes("num font-bold")
-                        width = max(4, s.felt_min / mx * 100) if s.available and mx > 0 else 0
+                            ui.label(
+                                f"{s.total_min:.0f} min · {de(s.cost_eur, 2)} €" if s.available else "entfällt"
+                            ).classes("num font-bold")
+                        width = max(4, s.total_min / mx * 100) if s.available and mx > 0 else 0
                         opacity = 1 if s.mode == rec.best else 0.45
                         theme.html(
                             f'<div class="bar-track"><div class="bar-fill" style="width:{width:.0f}%;'
                             f'background:{s.mode.color};opacity:{opacity}"></div></div>'
                         ).classes("w-full")
-                ui.label("Weniger ist besser: Reisezeit + Aufschläge + Kosten.").classes("tiny opacity-80")
+                vot = state.settings().prefs.value_of_time_eur_h
+                ui.label(
+                    f"Balken = echte Minuten von Tür zu Tür. Empfohlen wird die beste Mischung aus Zeit und Geld "
+                    f"(dir ist eine Stunde {vot:.0f} € wert – änderbar in den Einstellungen)."
+                ).classes("tiny opacity-80")
 
 
 def _mode_card(s: ModeScore, winner: bool, scale: float, delay: int) -> None:
@@ -190,10 +196,9 @@ def _mode_card(s: ModeScore, winner: bool, scale: float, delay: int) -> None:
             return
 
         with ui.row().classes("items-baseline gap-2"):
-            ui.label(f"{s.felt_min:.0f}").classes("big-num num")
-            ui.label("gefühlte min").classes("muted font-medium")
+            ui.label(f"{s.total_min:.0f}").classes("big-num num")
+            ui.label("min Tür zu Tür").classes("muted font-medium")
         with ui.row().classes("gap-2 wrap"):
-            theme.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">schedule</span>ca. {s.travel_min:.0f} min</span>')
             theme.html(f'<span class="pill"><span class="material-icons" style="font-size:14px">euro</span>{de(s.cost_eur, 2)} €</span>')
         for n in s.notes[:2]:
             ui.label(n).classes("tiny muted leading-snug")
@@ -201,12 +206,10 @@ def _mode_card(s: ModeScore, winner: bool, scale: float, delay: int) -> None:
             ui.button("Verbindung ansehen", icon="route", on_click=lambda o=s.option: journey.open_journey(o)).props(
                 "flat dense no-caps"
             ).classes("tiny self-start text-[color:var(--bahn)] -ml-1")
-        with ui.expansion("Wie kommt die Zahl zustande?", icon="calculate").props("dense header-class='px-0 text-[color:var(--muted)]'").classes("w-full tiny"):
+        with ui.expansion("So setzt sich die Zeit zusammen", icon="schedule").props("dense header-class='px-0 text-[color:var(--muted)]'").classes("w-full tiny"):
             for p in s.parts:
-                sign = "plus" if p.minutes > 0 and not p.label.startswith("Fahrzeit") else "minus" if p.minutes < 0 else ""
-                txt = f"{p.minutes:+.1f}".replace(".", ",") if p.label != s.parts[0].label else f"{p.minutes:.1f}".replace(".", ",")
-                theme.html(f'<div class="part-row"><span>{_esc(p.label)}</span><span class="num {sign}">{txt} min</span></div>').classes("w-full")
-            theme.html(f'<div class="part-row" style="font-weight:700"><span>Summe</span><span class="num">{de(s.felt_min)} min</span></div>').classes("w-full")
+                theme.html(f'<div class="part-row"><span>{_esc(p.label)}</span><span class="num">{de(p.minutes)} min</span></div>').classes("w-full")
+            theme.html(f'<div class="part-row" style="font-weight:700"><span>Summe</span><span class="num">{de(s.total_min)} min</span></div>').classes("w-full")
 
 
 def _weather_card(data: TravelData, result: Result) -> None:

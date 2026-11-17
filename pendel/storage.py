@@ -90,7 +90,7 @@ def add_history(route: Route, rec: Recommendation, weather_text: str, day: date 
             "best": rec.best.value if rec.best else None,
             "confidence": rec.confidence,
             "weather": weather_text,
-            "scores": {s.mode.value: round(s.felt_min, 1) for s in rec.scores if s.available},
+            "scores": {s.mode.value: round(s.total_min, 1) for s in rec.scores if s.available},
         }
     )
     entries.sort(key=lambda e: e["date"])

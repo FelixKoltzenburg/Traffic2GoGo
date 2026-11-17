@@ -115,6 +115,8 @@ body { background: var(--bg) !important; color: var(--ink);
 .seg { border: 1px solid var(--line); border-radius: 999px; }
 .route-chip { border-radius: 999px !important; color: var(--ink) !important; border-color: var(--line) !important; }
 .go-btn { height: 40px; }
+.dt-switch { font-size: .85rem; font-weight: 600; padding: 2px 10px 2px 4px; border-radius: 999px;
+  border: 1px solid var(--line); }
 
 /* Klickbare Verbindungen */
 .conn-click { cursor: pointer; border-radius: 12px; transition: background .15s; margin: 0 -8px; padding: 0 8px;

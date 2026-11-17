@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from . import timeutil
 from .decision import evaluate
 from .demo import demo_data
-from .models import Recommendation, Route, RouteLeg, Settings, TravelData
-from .services import routing, traffic, transit, weather
+from .models import Recommendation, Route, Settings, TravelData
+from .services import fares, routing, traffic, transit, weather
 
 log = logging.getLogger("pendel")
 
@@ -50,14 +50,11 @@ async def collect_live(
     )
     car_leg, car_line = car_res if car_res else (None, [])
     bike_leg = bike_res[0] if bike_res else None
-    # Fallback: Ist der Routing-Dienst down, schätzen wir über die Luftlinie.
-    air = routing.haversine_km((o.lat, o.lon), (d.lat, d.lon))
+    # Fallback: Ist kein Routing-Server erreichbar, schätzen wir (siehe routing.estimate_leg).
     if car_leg is None:
-        km = air * 1.35
-        car_leg = RouteLeg(km, km / (24 if km < 8 else 40) * 60 + 2, estimated=True)
+        car_leg = routing.estimate_leg(o, d, "car")
     if bike_leg is None:
-        km = air * 1.25
-        bike_leg = RouteLeg(km, km / 16 * 60, estimated=True)
+        bike_leg = routing.estimate_leg(o, d, "bike")
 
     incidents = []
     if car_leg and car_leg.roads:
@@ -87,6 +84,7 @@ async def recommend(
         data = demo_data(route, departure, settings.demo_scenario)
     else:
         data = await collect_live(route, settings, departure, arrive_by)
+    fares.attach_fares(route.origin, route.destination, data.transit)  # Ticketpreise (Teil 4)
     rec = evaluate(route, settings.prefs, data, departure, arrive_by)
     return Result(route, departure, data, rec, arrive_by)
 

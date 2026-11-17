@@ -14,8 +14,9 @@ from typing import Awaitable, Callable
 from nicegui import app, ui
 
 from .. import state, storage, timeutil
+from ..decision import de
 from ..models import Mode, Place, Route
-from ..services import geocode
+from ..services import fares, geocode
 
 STORAGE_KEY = "search"
 
@@ -276,9 +277,20 @@ def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> 
 
                 ui.chip(r.name, icon="route", on_click=pick).props("outline clickable").classes("route-chip")
             ui.space()
+            # Deutschlandticket: an = Bahn kostet 0 €, aus = die App schätzt den echten Ticketpreis
+            prefs = state.settings().prefs
+            dticket = ui.switch("Deutschlandticket", value=prefs.has_deutschlandticket).props("dense color=positive").classes(
+                "dt-switch"
+            ).tooltip(f"Hast du ein Deutschlandticket ({de(fares.deutschlandticket_price(), 2)} €/Monat)? "
+                      "Dann kostet jede Fahrt 0 €. Sonst rechnet die App mit dem Preis eines EinzelTickets.")
             save_btn = ui.button("Als Strecke speichern", icon="bookmark_add").props("flat no-caps dense").classes(
                 "tiny text-[color:var(--muted)]"
             )
+
+    async def toggle_dticket(e) -> None:
+        prefs.has_deutschlandticket = bool(e.value)
+        state.save()
+        await submit()  # Empfehlung mit dem neuen Preis neu berechnen
 
     async def submit() -> None:
         changed()
@@ -328,6 +340,7 @@ def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> 
         dlg.open()
 
     go.on_click(submit)
+    dticket.on_value_change(toggle_dticket)
     save_btn.on_click(save_as_route)
     for field in (origin.input, dest.input):
         field.on("keydown.enter", submit)

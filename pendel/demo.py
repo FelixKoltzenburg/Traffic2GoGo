@@ -10,8 +10,8 @@ import math
 import random
 from datetime import datetime, timedelta
 
-from .models import HourWeather, Incident, Route, RouteLeg, TransitLeg, TransitOption, TravelData, WeatherInfo
-from .services.routing import haversine_km
+from .models import HourWeather, Incident, Route, TransitLeg, TransitOption, TravelData, WeatherInfo
+from .services.routing import estimate_leg, haversine_km
 
 SCENARIOS = {
     "auto": "Zufällig (wechselt täglich)",
@@ -39,18 +39,18 @@ def demo_data(route: Route, departure: datetime, scenario: str) -> TravelData:
         scenario = rnd.choice(list(WEATHER))
 
     air = haversine_km((route.origin.lat, route.origin.lon), (route.destination.lat, route.destination.lon))
-    car_km = max(0.8, air * 1.35)
-    bike_km = max(0.6, air * 1.25)
-    car_speed = 24 if car_km < 8 else 40  # km/h ohne Verkehr, Stadt vs. Umland
-    car = RouteLeg(car_km, car_km / car_speed * 60 + 2, roads=["A8"] if car_km > 8 else [])
-    bike = RouteLeg(bike_km, bike_km / 16 * 60)
+    # gleiche Formel wie die Notfall-Schätzung, damit Demo und Live zusammenpassen
+    car = estimate_leg(route.origin, route.destination, "car")
+    car.estimated, car.roads = False, (["A8"] if car.distance_km > 8 else [])
+    bike = estimate_leg(route.origin, route.destination, "bike")
+    bike.estimated = False
 
     return TravelData(
         weather=_weather(departure, scenario, rnd),
         transit=_transit(route, departure, air, scenario, rnd),
         car=car,
         bike=bike,
-        incidents=_incidents(car_km, scenario),
+        incidents=_incidents(car.distance_km, scenario),
         demo=True,
     )
 
