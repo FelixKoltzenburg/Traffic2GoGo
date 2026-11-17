@@ -91,6 +91,8 @@ class Settings:
     prefs: Preferences = field(default_factory=Preferences)
     demo_mode: bool = False  # Standard: echte Daten. Demo nur zum Ausprobieren ohne Internet.
     demo_scenario: str = "auto"  # auto | sonne | regen | stau | bahnchaos | winter
+    season: str = "auto"  # Design-Jahreszeit: auto | fruehling | sommer | herbst | winter
+    animations: bool = True  # Blätter, Schnee usw. am Seitenrand
     transit_api_base: str = "https://api.transitous.org"  # freier ÖPNV-Routingdienst (MOTIS)
 
 

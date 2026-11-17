@@ -8,7 +8,7 @@ from ..demo import SCENARIOS
 from ..models import Mode, Place, Route
 from ..services import geocode
 from ..timeutil import WEEKDAYS
-from . import theme
+from . import seasons, theme
 
 
 def register() -> None:
@@ -20,7 +20,37 @@ def register() -> None:
             ui.label("Einstellungen").classes("text-2xl font-extrabold tracking-tight")
             routes_section()
             prefs_section()
+            look_section()
             sources_section()
+
+
+# ---------------------------------------------------------------------------
+# Darstellung
+# ---------------------------------------------------------------------------
+
+
+def look_section() -> None:
+    s = state.settings()
+
+    def set_season(e) -> None:
+        s.season = e.value
+        state.save()
+        ui.navigate.reload()  # Farben gelten für die ganze Seite
+
+    def set_anim(e) -> None:
+        s.animations = bool(e.value)
+        state.save()
+        ui.navigate.reload()
+
+    with ui.column().classes("card w-full gap-3"):
+        ui.label("Darstellung").classes("h-title")
+        ui.label(
+            f"Farben und Rand-Animation wechseln mit der Jahreszeit. Gerade: {theme.season().icon} {theme.season().label}."
+        ).classes("tiny muted")
+        with ui.row().classes("w-full items-center gap-6"):
+            ui.select(seasons.CHOICES, value=s.season if s.season in seasons.CHOICES else "auto",
+                      label="Jahreszeit", on_change=set_season).props("outlined dense").classes("min-w-[240px]")
+            ui.switch("Animationen am Rand", value=s.animations, on_change=set_anim)
 
 
 # ---------------------------------------------------------------------------

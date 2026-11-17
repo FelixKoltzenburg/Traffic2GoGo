@@ -7,6 +7,7 @@ Die letzte Suche merkt sich der Browser (``app.storage.user``).
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from typing import Awaitable, Callable
@@ -96,6 +97,13 @@ def short(name: str) -> str:
     return name.split(",")[0].strip()
 
 
+def _rest(place: Place | None) -> str:
+    """Alles nach dem ersten Komma: „Rotebühlplatz 41, 70178 Stuttgart“."""
+    if not place:
+        return ""
+    return place.name[len(short(place.name)):].lstrip(", ")
+
+
 def known_places() -> list[Place]:
     """Alle Orte aus den gespeicherten Strecken (ohne Doppelte)."""
     seen: dict[tuple[float, float], Place] = {}
@@ -123,14 +131,14 @@ class PlaceInput:
         self._on_change = on_change
         self._muted = False
         self._seq = 0  # zählt Suchanfragen hoch; veraltete Antworten werden ignoriert
-        with ui.element("div").classes("relative w-full"):
+        with ui.element("div").classes("relative w-full min-w-0"):
+            ui.label(label).classes("place-label")
             self.input = (
-                ui.input(label, value=place.name if place else "")
-                .props("outlined clearable debounce=350 autocomplete=off")
-                .classes("w-full search-field")
+                ui.input(value=short(place.name) if place else "", placeholder="Ort oder Adresse")
+                .props(f'borderless clearable debounce=350 autocomplete=off aria-label="{label}"')
+                .classes("w-full big-input")
             )
-            with self.input.add_slot("prepend"):
-                ui.icon(icon).classes("text-[color:var(--muted)]")
+            self.sub = ui.label(_rest(place)).classes("place-sub")
             self.box = ui.column().classes("search-menu gap-0")
             self.box.set_visibility(False)
         self.input.on("focus", lambda: self._suggest(""))
@@ -141,7 +149,8 @@ class PlaceInput:
     def set(self, place: Place | None) -> None:
         self._muted = True
         self.place = place
-        self.input.value = place.name if place else ""
+        self.input.value = short(place.name) if place else ""
+        self.sub.text = _rest(place)
         self._muted = False
 
     def hide(self) -> None:
@@ -157,9 +166,10 @@ class PlaceInput:
         if self._muted:
             return
         text = (e.value or "").strip()
-        if self.place and text == self.place.name:
+        if self.place and text in (self.place.name, short(self.place.name)):
             return
         self.place = None  # getippt, aber noch nichts ausgewählt
+        self.sub.text = "Bitte einen Vorschlag auswählen"
         await self._suggest(text)
 
     async def _suggest(self, text: str) -> None:
@@ -217,79 +227,115 @@ class PlaceInput:
 
 
 def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> None:
-    """Zeichnet die Suchkarte. ``on_search`` wird mit der fertigen Suche aufgerufen."""
+    """Zeichnet die Suche als Fahrschein. ``on_search`` wird mit der fertigen Suche aufgerufen."""
+    prefs = state.settings().prefs
 
     def changed() -> None:
         query.origin = origin.place
         query.destination = dest.place
         query.route_id = query.route_id if _matches_saved(query) else None
+        fare_box.refresh()
 
-    with ui.column().classes("card w-full gap-3 search-card"):
-        # --- Von / Nach -------------------------------------------------------
-        with ui.row().classes("w-full items-center gap-2 no-wrap"):
-            with ui.column().classes("flex-1 gap-2 min-w-0"):
+    with ui.element("div").classes("ticket fade-in"):
+        # ===== linker Teil: Strecke und Zeit ==================================
+        with ui.element("div").classes("t-main"):
+            with ui.element("div").classes("t-top"):
+                ui.label("Fahrschein-Anfrage").classes("kicker")
+                date_label = ui.label(_date_text(query.when.date())).classes("kicker")
+            with ui.element("div").classes("route"):
                 origin = PlaceInput("Von", "trip_origin", query.origin, changed)
+
+                def swap() -> None:
+                    a, b = origin.place, dest.place
+                    origin.set(b)
+                    dest.set(a)
+                    changed()
+
+                ui.button(icon="swap_horiz", on_click=swap).props("flat round").classes("swap-btn").tooltip(
+                    "Start und Ziel tauschen"
+                )
                 dest = PlaceInput("Nach", "place", query.destination, changed)
 
-            def swap() -> None:
-                a, b = origin.place, dest.place
-                origin.set(b)
-                dest.set(a)
-                changed()
+            with ui.element("div").classes("meta"):
+                with ui.column().classes("gap-0"):
+                    ui.label("Datum").classes("tiny muted")
+                    day = _date_input(query.when.date())
+                with ui.column().classes("gap-0"):
+                    ui.label("Uhrzeit").classes("tiny muted")
+                    clock = _time_input(f"{query.when:%H:%M}")
+                mode = ui.toggle({False: "Abfahrt", True: "Ankunft"}, value=query.arrive).props(
+                    "unelevated no-caps toggle-color=primary"
+                ).classes("seg")
 
-            ui.button(icon="swap_vert", on_click=swap).props("flat round").classes(
-                "text-[color:var(--muted)]"
-            ).tooltip("Start und Ziel tauschen")
-
-        # --- Wann -------------------------------------------------------------
-        with ui.row().classes("w-full items-center gap-2 wrap"):
-            mode = ui.toggle({False: "Abfahrt", True: "Ankunft"}, value=query.arrive).props(
-                "rounded unelevated no-caps toggle-color=primary"
-            ).classes("seg")
-            day = _date_input(query.when.date())
-            clock = _time_input(f"{query.when:%H:%M}")
-
-            def now() -> None:
-                n = timeutil.now()
-                day.value = n.strftime("%d.%m.%Y")
-                clock.value = n.strftime("%H:%M")
-                mode.value = False
-
-            ui.button("Jetzt", on_click=now).props("flat rounded no-caps dense").classes("px-3")
-            ui.space()
-            go = ui.button("Verbindung prüfen", icon="search").props("unelevated rounded no-caps").classes("px-5 go-btn")
-
-        # --- Gespeicherte Strecken -------------------------------------------
-        routes = state.settings().routes
-        with ui.row().classes("w-full items-center gap-2 wrap"):
-            if routes:
-                ui.label("Meine Strecken:").classes("tiny muted")
-            for r in routes:
-                async def pick(r: Route = r) -> None:
-                    q = from_route(r)
-                    origin.set(q.origin)
-                    dest.set(q.destination)
-                    day.value = q.when.strftime("%d.%m.%Y")
-                    clock.value = q.when.strftime("%H:%M")
+                def now() -> None:
+                    n = timeutil.now()
+                    day.value = n.strftime("%d.%m.%Y")
+                    clock.value = n.strftime("%H:%M")
                     mode.value = False
-                    query.route_id = r.id
-                    await submit()
 
-                ui.chip(r.name, icon="route", on_click=pick).props("outline clickable").classes("route-chip")
-            ui.space()
-            # Deutschlandticket: an = Bahn kostet 0 €, aus = die App schätzt den echten Ticketpreis
-            prefs = state.settings().prefs
-            dticket = ui.switch("Deutschlandticket", value=prefs.has_deutschlandticket).props("dense color=positive").classes(
-                "dt-switch"
-            ).tooltip(f"Hast du ein Deutschlandticket ({de(fares.deutschlandticket_price(), 2)} €/Monat)? "
-                      "Dann kostet jede Fahrt 0 €. Sonst rechnet die App mit dem Preis eines EinzelTickets.")
-            save_btn = ui.button("Als Strecke speichern", icon="bookmark_add").props("flat no-caps dense").classes(
-                "tiny text-[color:var(--muted)]"
-            )
+                ui.button("Jetzt", on_click=now).props("flat no-caps dense").classes("link-btn mb-1")
+
+            routes = state.settings().routes
+            with ui.element("div").classes("mine"):
+                ui.label("Meine Strecken").classes("kicker mr-1")
+                for r in routes:
+                    async def pick(r: Route = r) -> None:
+                        q = from_route(r)
+                        origin.set(q.origin)
+                        dest.set(q.destination)
+                        day.value = q.when.strftime("%d.%m.%Y")
+                        clock.value = q.when.strftime("%H:%M")
+                        mode.value = False
+                        query.route_id = r.id
+                        await submit()
+
+                    ui.chip(f"★ {r.name}", on_click=pick).props("clickable square").classes("route-chip")
+                if not routes:
+                    ui.label("noch keine").classes("tiny muted")
+                ui.space()
+                save_btn = ui.button("+ Als Strecke speichern").props("flat no-caps dense").classes("link-btn")
+
+        # ===== rechter Abschnitt: Deutschlandticket, Preis, Los geht's ===========
+        with ui.element("div").classes("t-stub"):
+            with ui.column().classes("gap-1"):
+                with ui.element("div").classes("dt-row"):
+                    ui.label("Deutschlandticket")
+                    dticket = ui.switch(value=prefs.has_deutschlandticket).props("dense").classes("dt-switch")
+                dt_hint = ui.label(_dt_hint(prefs.has_deutschlandticket)).classes("tiny muted")
+
+            @ui.refreshable
+            def fare_box() -> None:
+                with ui.column().classes("fare gap-0"):
+                    ui.label("Dein Ticket für diese Strecke").classes("kicker")
+                    if not query.complete:
+                        ui.label("–").classes("fare-price")
+                        ui.label("Start und Ziel auswählen").classes("tiny muted")
+                        return
+                    f = fares.estimate_fare(query.origin, query.destination)
+                    dt_price = fares.deutschlandticket_price()
+                    with ui.row().classes("items-baseline gap-2"):
+                        if prefs.has_deutschlandticket:
+                            ui.label("0,00 €").classes("fare-price")
+                            ui.label("mit Deutschlandticket").classes("tiny muted")
+                        else:
+                            ui.label(f"{de(f.amount, 2)} €").classes("fare-price")
+                            ui.label(_fare_short(f.label)).classes("tiny muted")
+                    if prefs.has_deutschlandticket:
+                        ui.label(f"Einzeln würde die Fahrt {de(f.amount, 2)} € kosten.").classes("tiny muted")
+                    else:
+                        trips = math.ceil(dt_price / f.amount)
+                        ui.label(
+                            f"Deutschlandticket ({de(dt_price, 0)} €/Monat) lohnt sich ab {trips} Fahrten im Monat."
+                        ).classes("tiny muted")
+
+            fare_box()
+            go = ui.button("Verbindung prüfen").props("unelevated no-caps").classes("go")
 
     async def toggle_dticket(e) -> None:
         prefs.has_deutschlandticket = bool(e.value)
         state.save()
+        dt_hint.text = _dt_hint(prefs.has_deutschlandticket)
+        fare_box.refresh()
         await submit()  # Empfehlung mit dem neuen Preis neu berechnen
 
     async def submit() -> None:
@@ -306,6 +352,7 @@ def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> 
         query.when = datetime.combine(d, t)
         query.arrive = bool(mode.value)
         query.save()
+        date_label.text = _date_text(d)
         await on_search(query)
 
     def save_as_route() -> None:
@@ -313,7 +360,7 @@ def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> 
         if not query.complete:
             ui.notify("Bitte erst Start und Ziel auswählen", type="warning")
             return
-        with ui.dialog() as dlg, ui.card().classes("w-[420px] max-w-[95vw] gap-3 p-6 rounded-3xl"):
+        with ui.dialog() as dlg, ui.card().classes("w-[420px] max-w-[95vw] gap-3 p-6"):
             ui.label("Strecke speichern").classes("text-lg font-extrabold")
             ui.label(f"{short(query.origin.name)} → {short(query.destination.name)}").classes("muted")
             name = ui.input("Name", placeholder="z. B. Zur Uni").props("outlined dense autofocus").classes("w-full")
@@ -336,7 +383,7 @@ def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> 
             name.on("keydown.enter", ok)
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("Abbrechen", on_click=dlg.close).props("flat no-caps")
-                ui.button("Speichern", icon="check", on_click=ok).props("unelevated rounded no-caps")
+                ui.button("Speichern", on_click=ok).props("unelevated no-caps").classes("go w-auto px-5")
         dlg.open()
 
     go.on_click(submit)
@@ -346,14 +393,32 @@ def search_card(query: Query, on_search: Callable[[Query], Awaitable[None]]) -> 
         field.on("keydown.enter", submit)
 
 
+WEEKDAYS_SHORT = ["MO", "DI", "MI", "DO", "FR", "SA", "SO"]
+
+
+def _date_text(d: date) -> str:
+    return f"{WEEKDAYS_SHORT[d.weekday()]} {d:%d.%m.%Y}"
+
+
+def _dt_hint(on: bool) -> str:
+    return "An: Bahnfahrten kosten 0 €." if on else "Aus: Die App rechnet mit dem EinzelTicket."
+
+
+def _fare_short(label: str) -> str:
+    """„VVS EinzelTicket, 2 Zonen (geschätzt)“ → „VVS · 2 Zonen“."""
+    if label.startswith("VVS") and "," in label:
+        return "VVS · " + label.split(",", 1)[1].replace("(geschätzt)", "").strip()
+    return "geschätzt"
+
+
 def _matches_saved(q: Query) -> bool:
     r = next((r for r in state.settings().routes if r.id == q.route_id), None)
     return bool(r and r.origin == q.origin and r.destination == q.destination)
 
 
 def _date_input(value: date):
-    with ui.input("Datum", value=value.strftime("%d.%m.%Y")).props("outlined dense mask=##.##.####").classes(
-        "w-[150px]"
+    with ui.input(value=value.strftime("%d.%m.%Y")).props('borderless dense mask=##.##.#### aria-label="Datum"').classes(
+        "meta-field w-[150px]"
     ) as inp:
         with inp.add_slot("append"):
             ui.icon("event").classes("cursor-pointer").on("click", lambda: menu.open())
@@ -363,7 +428,7 @@ def _date_input(value: date):
 
 
 def _time_input(value: str):
-    with ui.input("Uhrzeit", value=value).props("outlined dense mask=time").classes("w-[120px]") as inp:
+    with ui.input(value=value).props('borderless dense mask=time aria-label="Uhrzeit"').classes("meta-field w-[96px]") as inp:
         with inp.add_slot("append"):
             ui.icon("schedule").classes("cursor-pointer").on("click", lambda: menu.open())
             with ui.menu() as menu:
