@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import timeutil
 from .decision import evaluate
@@ -22,12 +22,15 @@ log = logging.getLogger("pendel")
 @dataclass
 class Result:
     route: Route
-    departure: datetime
+    departure: datetime  # gewünschte Abfahrt (im Ankunft-Modus: geschätzt)
     data: TravelData
     rec: Recommendation
+    arrive_by: datetime | None = None
 
 
-async def collect_live(route: Route, settings: Settings, departure: datetime) -> TravelData:
+async def collect_live(
+    route: Route, settings: Settings, departure: datetime, arrive_by: datetime | None = None
+) -> TravelData:
     errors: dict[str, str] = {}
 
     async def safe(name: str, coro):
@@ -41,7 +44,7 @@ async def collect_live(route: Route, settings: Settings, departure: datetime) ->
     o, d = route.origin, route.destination
     w, journeys, car_res, bike_res = await asyncio.gather(
         safe("wetter", weather.fetch_weather(o.lat, o.lon, departure)),
-        safe("bahn", transit.fetch_journeys(settings.transit_api_base, o, d, departure)),
+        safe("bahn", transit.fetch_journeys(settings.transit_api_base, o, d, departure, arrive_by=arrive_by)),
         safe("auto", routing.fetch_route(o, d, "car")),
         safe("rad", routing.fetch_route(o, d, "bike")),
     )
@@ -71,14 +74,21 @@ async def collect_live(route: Route, settings: Settings, departure: datetime) ->
     )
 
 
-async def recommend(route: Route, settings: Settings, departure: datetime | None = None) -> Result:
+async def recommend(
+    route: Route, settings: Settings, departure: datetime | None = None, arrive_by: datetime | None = None
+) -> Result:
+    """Empfehlung für eine Abfahrtszeit – oder mit ``arrive_by`` für eine Ankunftszeit."""
+    if arrive_by:
+        # Abfahrt grob schätzen (fürs Wetter und die Demo-Daten): Luftlinie, ca. 20 km/h
+        air = routing.haversine_km((route.origin.lat, route.origin.lon), (route.destination.lat, route.destination.lon))
+        departure = arrive_by - timedelta(minutes=air * 1.35 / 20 * 60 + 20)
     departure = departure or timeutil.next_departure(route.departure, route.weekdays)
     if settings.demo_mode:
         data = demo_data(route, departure, settings.demo_scenario)
     else:
-        data = await collect_live(route, settings, departure)
-    rec = evaluate(route, settings.prefs, data, departure)
-    return Result(route, departure, data, rec)
+        data = await collect_live(route, settings, departure, arrive_by)
+    rec = evaluate(route, settings.prefs, data, departure, arrive_by)
+    return Result(route, departure, data, rec, arrive_by)
 
 
 def _short(e: Exception) -> str:

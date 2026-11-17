@@ -1,5 +1,5 @@
 """Tests für Entscheidungslogik und Parser. Starten mit:  pytest -q"""
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pendel.decision import evaluate, is_rush_hour
 from pendel.demo import demo_data
@@ -137,3 +137,39 @@ def test_autobahn_item_near_route():
 
 def test_near_line():
     assert near_line((48.75, 9.19), [(48.80, 9.21), (48.69, 9.16)], 1.0)
+
+
+# --- Ankunft-Modus (Teil 2: Verbindungssuche wie bei der DB) ---------------
+
+
+def test_arrive_by_only_counts_trains_arriving_in_time():
+    arrive = datetime(2026, 11, 4, 8, 30)
+    data = demo_data(ROUTE, arrive - timedelta(minutes=50), "sonne")
+    r = evaluate(ROUTE, Preferences(), data, arrive - timedelta(minutes=50), arrive_by=arrive)
+    bahn = next(s for s in r.scores if s.mode == Mode.TRANSIT)
+    assert bahn.available
+    ankunft = bahn.notes[0].split("an")[0]  # "07:54 ab, 08:24 an · ..."
+    assert "ab" in ankunft
+    late = [o for o in data.transit if o.arrival > arrive]
+    assert late, "Testdaten sollten auch zu späte Züge enthalten"
+    for o in late:
+        assert f"{o.departure:%H:%M} ab" not in bahn.notes[0]
+
+
+def test_arrive_by_tells_when_to_leave_by_car_and_bike():
+    arrive = datetime(2026, 11, 4, 8, 30)
+    data = demo_data(ROUTE, arrive - timedelta(minutes=50), "sonne")
+    r = evaluate(ROUTE, Preferences(), data, arrive - timedelta(minutes=50), arrive_by=arrive)
+    for mode in (Mode.CAR, Mode.BIKE):
+        s = next(x for x in r.scores if x.mode == mode)
+        leave = datetime.combine(arrive.date(), datetime.strptime(s.notes[0][-5:], "%H:%M").time())
+        assert s.notes[0].startswith("Losfahren um")
+        assert abs((arrive - leave).total_seconds() / 60 - s.travel_min) < 1.01
+
+
+def test_arrive_by_without_any_train_in_time():
+    arrive = datetime(2026, 11, 4, 6, 0)
+    data = demo_data(ROUTE, datetime(2026, 11, 4, 7, 45), "sonne")  # alle Züge nach 7:45
+    r = evaluate(ROUTE, Preferences(), data, arrive, arrive_by=arrive)
+    bahn = next(s for s in r.scores if s.mode == Mode.TRANSIT)
+    assert not bahn.available and "06:00" in bahn.excluded_reason

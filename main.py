@@ -55,7 +55,7 @@ ON_SERVER = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         title=theme.APP_NAME,
-        favicon=theme.LOGO_FILE,
+        favicon=theme.LOGO_FILE if theme.LOGO_FILE.is_file() else "🚦",
         language="de",
         host=os.environ.get("HOST", "0.0.0.0" if ON_SERVER else "127.0.0.1"),
         port=int(os.environ.get("PORT", 8080)),

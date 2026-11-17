@@ -104,6 +104,16 @@ body { background: var(--bg) !important; color: var(--ink);
 .q-field__label, .q-field__native, .q-field__suffix { color: var(--ink) !important; }
 .footer a { color: var(--muted); }
 .q-dialog .q-card { background: var(--card); color: var(--ink); }
+
+/* Verbindungssuche */
+.search-card { padding: 18px 20px; }
+.search-field .q-field__control { border-radius: 14px; background: var(--soft); }
+.search-menu { border-radius: 14px; min-width: 280px; }
+.body--dark .search-menu { background: var(--card); color: var(--ink); }
+.search-item { min-height: 44px; }
+.seg { border: 1px solid var(--line); border-radius: 999px; }
+.route-chip { border-radius: 999px !important; color: var(--ink) !important; border-color: var(--line) !important; }
+.go-btn { height: 40px; }
 """
 
 
@@ -122,7 +132,8 @@ def setup() -> None:
         shared=True,
     )
     ui.add_css(CSS, shared=True)
-    app.add_static_file(local_file=LOGO_FILE, url_path=LOGO_URL)
+    if LOGO_FILE.is_file():  # fehlt die Datei, startet die App trotzdem (nur ohne Logo)
+        app.add_static_file(local_file=LOGO_FILE, url_path=LOGO_URL)
 
 
 @contextmanager

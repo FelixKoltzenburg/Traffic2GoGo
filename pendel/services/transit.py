@@ -15,7 +15,10 @@ from ..timeutil import aware, to_local
 from .http import get_json
 
 
-async def fetch_journeys(base: str, origin: Place, dest: Place, departure: datetime, results: int = 4) -> list[TransitOption]:
+async def fetch_journeys(
+    base: str, origin: Place, dest: Place, departure: datetime, results: int = 4, arrive_by: datetime | None = None
+) -> list[TransitOption]:
+    """Verbindungen ab ``departure`` – oder, wenn ``arrive_by`` gesetzt ist, mit Ankunft bis dahin."""
     params = {
         "from.latitude": origin.lat,
         "from.longitude": origin.lon,
@@ -23,7 +26,7 @@ async def fetch_journeys(base: str, origin: Place, dest: Place, departure: datet
         "to.latitude": dest.lat,
         "to.longitude": dest.lon,
         "to.address": dest.name,
-        "departure": aware(departure).isoformat(),
+        **({"arrival": aware(arrive_by).isoformat()} if arrive_by else {"departure": aware(departure).isoformat()}),
         "results": results,
         "stopovers": "false",
         "remarks": "false",

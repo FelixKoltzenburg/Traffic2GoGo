@@ -31,9 +31,8 @@ pendel/
   decision.py            Entscheidungslogik („gefühlte Minuten“)
   engine.py              holt alle Daten parallel und ruft die Logik auf
   demo.py                Demo-Daten und Szenarien
-  scheduler.py           Morgen-Job: Verlauf speichern + Push
+  scheduler.py           Morgen-Job: Empfehlung im Verlauf speichern
   storage.py             Einstellungen & Verlauf als JSON
-  notify.py              Push-Nachrichten über ntfy.sh
   timeutil.py            Zeitzonen-Hilfen (Europe/Berlin)
   services/              eine Datei pro API
     weather.py           Open-Meteo
@@ -74,7 +73,6 @@ Wichtig für den Server:
 | [routing.openstreetmap.de](https://routing.openstreetmap.de) | Auto- und Radrouten (© OpenStreetMap) | nein |
 | [Autobahn-API](https://autobahn.api.bund.dev) | Staus, Sperrungen, Baustellen | nein |
 | [Photon](https://photon.komoot.io) | Adresssuche | nein |
-| [ntfy.sh](https://ntfy.sh) | Push-Nachrichten (optional) | nein |
 
 Alle Dienste sind kostenlos, aber freiwillig betrieben. Die App fragt sparsam ab (Cache) und funktioniert
 weiter, wenn eine Quelle ausfällt.

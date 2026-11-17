@@ -1,5 +1,5 @@
 """Hintergrund-Job: berechnet jeden Pendeltag zur eingestellten Uhrzeit die
-Empfehlung, speichert sie im Verlauf und schickt optional eine Push-Nachricht.
+Empfehlung und speichert sie im Verlauf.
 
 Bewusst ohne Zusatzbibliothek: eine Schleife, die jede Minute prüft, ob es
 Zeit ist. (Ausbaustufe: APScheduler mit Cron-Ausdrücken.)
@@ -11,7 +11,6 @@ import logging
 
 from . import state, storage, timeutil
 from .engine import recommend
-from .notify import send_push
 
 log = logging.getLogger("pendel.scheduler")
 _done: set[tuple[str, str]] = set()  # (Datum, Strecken-ID) – heute schon erledigt?
@@ -42,11 +41,3 @@ async def tick() -> None:
         weather_text = f"{data.weather.description}, {w.temp_c:.0f} °C" if w else ""
         storage.add_history(route, rec, weather_text)
         log.info("Empfehlung für %s: %s", route.name, rec.headline)
-        if settings.ntfy_topic and rec.best:
-            body = "\n".join(rec.reasons[:4])
-            await send_push(
-                settings.ntfy_topic,
-                f"{route.name}: heute {rec.best.label} ({result.departure:%H:%M})",
-                body,
-                tags={"rad": "bike", "bahn": "train", "auto": "car"}[rec.best.value],
-            )

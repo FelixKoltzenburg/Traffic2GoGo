@@ -6,7 +6,6 @@ from nicegui import ui
 from .. import state, storage
 from ..demo import SCENARIOS
 from ..models import Mode, Place, Route
-from ..notify import send_push
 from ..services import geocode
 from ..timeutil import WEEKDAYS
 from . import theme
@@ -17,7 +16,6 @@ def register() -> None:
     def settings_page():
         if not state.check_login():
             return
-        s = state.settings()
         with theme.frame("/einstellungen"):
             ui.label("Einstellungen").classes("text-2xl font-extrabold tracking-tight")
             routes_section()
@@ -49,7 +47,7 @@ def routes_section() -> None:
                     ui.label(f"{r.origin.name} → {r.destination.name}").classes("tiny muted truncate w-full")
                     days = " ".join(WEEKDAYS[d] for d in sorted(r.weekdays))
                     modes = " · ".join(Mode(m).label for m in r.modes)
-                    ui.label(f"Abfahrt {r.departure} · {days} · {modes} · Empfehlung um {r.notify_time}").classes("tiny muted")
+                    ui.label(f"Abfahrt {r.departure} · {days} · {modes} · im Verlauf um {r.notify_time}").classes("tiny muted")
                 ui.button(icon="edit", on_click=lambda r=r: route_dialog(r)).props("flat round dense").tooltip("Bearbeiten")
                 ui.button(icon="delete", on_click=lambda r=r: delete_route(r)).props("flat round dense color=negative").tooltip("Löschen")
 
@@ -126,7 +124,7 @@ def route_dialog(existing: Route | None) -> None:
         place_picker("Ziel suchen", picked["destination"], picked, "destination")
         with ui.row().classes("w-full gap-3 no-wrap"):
             dep = _time_input("Abfahrt", existing.departure if existing else "07:30")
-            notify = _time_input("Empfehlung berechnen um", existing.notify_time if existing else "06:45")
+            notify = _time_input("Täglich im Verlauf speichern um", existing.notify_time if existing else "06:45")
         ui.label("Pendeltage").classes("tiny muted -mb-2")
         day_set = set(existing.weekdays if existing else [0, 1, 2, 3, 4])
         with ui.row().classes("gap-1"):
@@ -264,7 +262,7 @@ def sources_section() -> None:
     s = state.settings()
     with ui.column().classes("card w-full gap-4"):
         with ui.column().classes("gap-0"):
-            ui.label("Daten & Benachrichtigung").classes("h-title")
+            ui.label("Datenquellen").classes("h-title")
             ui.label("Live-Daten aus offenen APIs oder Demo-Daten zum Ausprobieren.").classes("tiny muted")
 
         with ui.row().classes("w-full items-center gap-6 wrap"):
@@ -287,23 +285,3 @@ def sources_section() -> None:
         api = ui.input("Bahn-API (Basis-URL)", value=s.transit_api_base).props("outlined dense").classes("w-full")
         api.on("blur", lambda: (setattr(s, "transit_api_base", (api.value or "").strip() or "https://v6.db.transport.rest"), state.save()))
 
-        with ui.row().classes("w-full items-end gap-2 no-wrap"):
-            topic = ui.input("ntfy.sh-Thema für Push-Nachrichten (optional)", value=s.ntfy_topic,
-                             placeholder="z. B. felix-pendel-7f3k").props("outlined dense").classes("flex-1")
-
-            async def test_push():
-                s.ntfy_topic = (topic.value or "").strip()
-                state.save()
-                if not s.ntfy_topic:
-                    ui.notify("Bitte erst ein Thema eintragen", type="warning")
-                    return
-                try:
-                    await send_push(s.ntfy_topic, "Pendel-Berater", "Test: Push-Nachrichten funktionieren.")
-                    ui.notify("Testnachricht gesendet", type="positive")
-                except Exception as e:  # noqa: BLE001
-                    ui.notify(f"Senden fehlgeschlagen: {type(e).__name__}", type="negative")
-
-            ui.button("Test", icon="send", on_click=test_push).props("unelevated rounded no-caps")
-        topic.on("blur", lambda: (setattr(s, "ntfy_topic", (topic.value or "").strip()), state.save()))
-        ui.label("Installiere die kostenlose ntfy-App und abonniere dasselbe Thema. "
-                 "Wähle einen schwer zu erratenden Namen – Themen sind öffentlich.").classes("tiny muted")

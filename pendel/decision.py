@@ -16,7 +16,7 @@ zeigen, *warum* die App sich entschieden hat.
 """
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from .models import (
     HourWeather,
@@ -54,7 +54,7 @@ def _money_to_min(eur: float, prefs: Preferences) -> float:
 # ---------------------------------------------------------------------------
 
 
-def score_bike(data: TravelData, prefs: Preferences) -> ModeScore:
+def score_bike(data: TravelData, prefs: Preferences, arrive_by: datetime | None = None) -> ModeScore:
     s = ModeScore(Mode.BIKE, available=True)
     if data.bike is None:
         return _excluded(s, "Keine Radroute verfügbar")
@@ -95,6 +95,8 @@ def score_bike(data: TravelData, prefs: Preferences) -> ModeScore:
     s.notes.append(f"{de(data.bike.distance_km)} km, ca. {travel:.0f} min")
     if data.bike.estimated:
         s.notes.append("Strecke nur geschätzt (Routing nicht erreichbar)")
+    if arrive_by:
+        s.notes.insert(0, f"Losfahren um {arrive_by - timedelta(minutes=travel):%H:%M}")
     return _finish(s)
 
 
@@ -103,23 +105,42 @@ def score_bike(data: TravelData, prefs: Preferences) -> ModeScore:
 # ---------------------------------------------------------------------------
 
 
-def score_transit(data: TravelData, prefs: Preferences, departure: datetime) -> ModeScore:
+def score_transit(
+    data: TravelData, prefs: Preferences, departure: datetime, arrive_by: datetime | None = None
+) -> ModeScore:
+    """Bewertet die beste Bahnverbindung.
+
+    Abfahrt-Modus: Verbindungen ab ``departure``; Warten bis zur Abfahrt zählt halb.
+    Ankunft-Modus (``arrive_by``): Verbindungen, die rechtzeitig ankommen; zu früh
+    am Ziel zu sein zählt halb.
+    """
     s = ModeScore(Mode.TRANSIT, available=True)
     if not data.transit:
         return _excluded(s, "Keine Verbindungsdaten" + (" (Dienst nicht erreichbar)" if "bahn" in data.errors else ""))
 
-    candidates = [o for o in data.transit if not o.cancelled and (o.departure - departure).total_seconds() > -120]
-    if not candidates:
-        return _excluded(s, "Alle passenden Verbindungen fallen aus")
+    usable = [o for o in data.transit if not o.cancelled]
+    if arrive_by:
+        candidates = [o for o in usable if (o.arrival - arrive_by).total_seconds() <= 60]
+        if not candidates:
+            return _excluded(s, f"Keine Verbindung kommt bis {arrive_by:%H:%M} an")
+    else:
+        candidates = [o for o in usable if (o.departure - departure).total_seconds() > -120]
+        if not candidates:
+            return _excluded(s, "Alle passenden Verbindungen fallen aus")
 
     best_parts: list[ScorePart] | None = None
     best_total = float("inf")
     best_opt = None
     for opt in candidates:
-        wait = max(0.0, (opt.departure - departure).total_seconds() / 60)
         parts = [ScorePart("Fahrzeit inkl. Fußwege", opt.duration_min)]
-        if wait >= 1:
-            parts.append(ScorePart(f"Warten bis {opt.departure:%H:%M} (halb gewertet)", wait * 0.5))
+        if arrive_by:
+            early = max(0.0, (arrive_by - opt.arrival).total_seconds() / 60)
+            if early >= 1:
+                parts.append(ScorePart(f"{early:.0f} min zu früh am Ziel (halb gewertet)", early * 0.5))
+        else:
+            wait = max(0.0, (opt.departure - departure).total_seconds() / 60)
+            if wait >= 1:
+                parts.append(ScorePart(f"Warten bis {opt.departure:%H:%M} (halb gewertet)", wait * 0.5))
         if opt.transfers:
             parts.append(ScorePart(f"{opt.transfers}× Umsteigen", opt.transfers * prefs.transit_transfer_penalty_min))
         if opt.delay_min >= 3:
@@ -149,7 +170,9 @@ def score_transit(data: TravelData, prefs: Preferences, departure: datetime) -> 
 # ---------------------------------------------------------------------------
 
 
-def score_car(data: TravelData, prefs: Preferences, departure: datetime) -> ModeScore:
+def score_car(
+    data: TravelData, prefs: Preferences, departure: datetime, arrive_by: datetime | None = None
+) -> ModeScore:
     s = ModeScore(Mode.CAR, available=True)
     if data.car is None:
         return _excluded(s, "Keine Autoroute verfügbar")
@@ -157,7 +180,9 @@ def score_car(data: TravelData, prefs: Preferences, departure: datetime) -> Mode
     base = data.car.duration_min
     s.parts.append(ScorePart("Fahrzeit ohne Verkehr", base))
     travel = base
-    if is_rush_hour(departure):
+    # Bei Ankunftswunsch zählt, ob die Fahrt selbst in den Berufsverkehr fällt
+    start = arrive_by - timedelta(minutes=base * prefs.rush_hour_factor) if arrive_by else departure
+    if is_rush_hour(start) or (arrive_by is not None and is_rush_hour(arrive_by)):
         extra = base * (prefs.rush_hour_factor - 1)
         s.parts.append(ScorePart("Berufsverkehr", extra))
         travel += extra
@@ -196,6 +221,8 @@ def score_car(data: TravelData, prefs: Preferences, departure: datetime) -> Mode
     s.notes.append(f"{de(data.car.distance_km)} km, ca. {travel:.0f} min, {de(cost, 2)} €")
     if data.car.estimated:
         s.notes.append("Strecke nur geschätzt (Routing nicht erreichbar)")
+    if arrive_by:
+        s.notes.insert(0, f"Losfahren um {arrive_by - timedelta(minutes=travel):%H:%M}")
     if data.incidents:
         s.notes.append(data.incidents[0].title + (f" – {data.incidents[0].subtitle}" if data.incidents[0].subtitle else ""))
     return _finish(s)
@@ -206,14 +233,18 @@ def score_car(data: TravelData, prefs: Preferences, departure: datetime) -> Mode
 # ---------------------------------------------------------------------------
 
 
-def evaluate(route: Route, prefs: Preferences, data: TravelData, departure: datetime) -> Recommendation:
+def evaluate(
+    route: Route, prefs: Preferences, data: TravelData, departure: datetime, arrive_by: datetime | None = None
+) -> Recommendation:
+    """``departure`` = gewünschte Abfahrt. Ist ``arrive_by`` gesetzt, wird stattdessen
+    nach der spätesten Ankunft gesucht (wie „Ankunft“ in der DB-App)."""
     scores: list[ModeScore] = []
     if Mode.BIKE.value in route.modes:
-        scores.append(score_bike(data, prefs))
+        scores.append(score_bike(data, prefs, arrive_by))
     if Mode.TRANSIT.value in route.modes:
-        scores.append(score_transit(data, prefs, departure))
+        scores.append(score_transit(data, prefs, departure, arrive_by))
     if Mode.CAR.value in route.modes:
-        scores.append(score_car(data, prefs, departure))
+        scores.append(score_car(data, prefs, departure, arrive_by))
 
     ranked = sorted((s for s in scores if s.available), key=lambda s: s.felt_min)
     if not ranked:

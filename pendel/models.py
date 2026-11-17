@@ -55,7 +55,7 @@ class Route:
     departure: str = "07:30"  # gewünschte Abfahrt, Format HH:MM
     weekdays: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])  # 0 = Montag
     modes: list[str] = field(default_factory=lambda: ["rad", "bahn", "auto"])
-    notify_time: str = "06:45"  # wann die Morgen-Empfehlung berechnet wird
+    notify_time: str = "06:45"  # wann die Tages-Empfehlung im Verlauf gespeichert wird
 
 
 @dataclass
@@ -95,7 +95,6 @@ class Settings:
     prefs: Preferences = field(default_factory=Preferences)
     demo_mode: bool = True
     demo_scenario: str = "auto"  # auto | sonne | regen | stau | bahnchaos | winter
-    ntfy_topic: str = ""  # optional: Push-Nachricht über ntfy.sh
     transit_api_base: str = "https://v6.db.transport.rest"
 
 

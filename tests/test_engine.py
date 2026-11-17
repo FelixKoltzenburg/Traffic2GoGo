@@ -73,3 +73,21 @@ def test_routing_down_uses_estimate(monkeypatch):
     result = asyncio.run(engine.recommend(s.routes[0], s, DEP))
     assert result.data.car.estimated and "auto" in result.data.errors
     assert result.rec.best is not None
+
+
+def test_arrival_is_sent_to_bahn_api(monkeypatch):
+    seen = {}
+
+    async def fake(url, params=None, ttl=300):
+        if "/journeys" in url:
+            seen.update(params)
+        return fake_responses(url, params)
+
+    for mod in ("weather", "routing", "traffic", "transit"):
+        monkeypatch.setattr(f"pendel.services.{mod}.get_json", fake)
+    s = default_settings()
+    s.demo_mode = False
+    arrive = datetime(2026, 11, 4, 8, 30)
+    result = asyncio.run(engine.recommend(s.routes[0], s, arrive_by=arrive))
+    assert seen["arrival"].startswith("2026-11-04T08:30") and "departure" not in seen
+    assert result.arrive_by == arrive

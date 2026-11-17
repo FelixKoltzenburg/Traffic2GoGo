@@ -8,9 +8,9 @@ from nicegui import app, ui
 from .. import state, timeutil
 from ..decision import de
 from ..engine import Result, recommend
-from ..models import Mode, ModeScore, TravelData
+from ..models import ModeScore, TravelData
 from ..weather_codes import icon as wx_icon
-from . import theme
+from . import search, theme
 
 SOURCE_NAMES = {"wetter": "Wetter", "bahn": "Bahn", "auto": "Autoroute", "rad": "Radroute", "autobahn": "Autobahn-Meldungen"}
 
@@ -20,54 +20,39 @@ def register() -> None:
     async def dashboard_page():
         if not state.check_login():
             return
-        settings = state.settings()
         with theme.frame("/"):
-            if not settings.routes:
-                _empty_state()
-                return
+            ui.label(f"{_greeting()} – wohin geht's?").classes("text-2xl font-extrabold tracking-tight")
+            query = search.load_query()
 
-            selected = {"id": app.storage.user.get("route_id", settings.routes[0].id)}
-            if selected["id"] not in {r.id for r in settings.routes}:
-                selected["id"] = settings.routes[0].id
-
-            # --- Kopf: Streckenwahl + Aktualisieren ---------------------------
-            with ui.row().classes("w-full items-end justify-between gap-4 wrap"):
-                with ui.column().classes("gap-1"):
-                    ui.label(f"{_greeting()} – wohin geht's?").classes("text-2xl font-extrabold tracking-tight")
-                    info = ui.label("").classes("muted")
-                with ui.row().classes("items-center gap-2"):
-                    toggle = ui.toggle(
-                        {r.id: r.name for r in settings.routes}, value=selected["id"]
-                    ).props("rounded unelevated toggle-color=primary no-caps").classes("bg-[color:var(--card)]")
-                    refresh_btn = ui.button(icon="refresh").props("round unelevated color=primary").tooltip("Neu berechnen")
-
-            content = ui.column().classes("w-full gap-5")
-
-            async def load(force: bool = False):
+            async def run(q: search.Query) -> None:
                 content.clear()
+                if not q.complete:
+                    with content:
+                        _empty_state()
+                    return
                 with content:
                     _skeleton()
-                route = next(r for r in settings.routes if r.id == selected["id"])
-                if force:
-                    state.clear_cache()
-                result = await recommend(route, state.settings())
+                route = q.to_route()
+                if q.arrive:
+                    result = await recommend(route, state.settings(), arrive_by=q.when)
+                else:
+                    result = await recommend(route, state.settings(), departure=q.when)
                 state.remember(result)
-                dep = result.departure
-                info.text = (
-                    f"{route.origin.name} → {route.destination.name} · Abfahrt {timeutil.day_label(dep)} um {dep:%H:%M} Uhr"
-                )
                 content.clear()
                 with content:
                     _render(result)
 
-            async def on_route(e):
-                selected["id"] = e.value
-                app.storage.user["route_id"] = e.value
-                await load()
+            search.search_card(query, run)  # oben: Von, Nach, Zeit – wie bei der DB
+            content = ui.column().classes("w-full gap-5")  # darunter: das Ergebnis
+            await run(query)
 
-            toggle.on_value_change(on_route)
-            refresh_btn.on_click(lambda: load(force=True))
-            await load()
+
+def _when_text(result: Result) -> str:
+    if result.arrive_by:
+        t = result.arrive_by
+        return f"Empfehlung für Ankunft {timeutil.day_label(t)} bis {t:%H:%M} Uhr"
+    t = result.departure
+    return f"Empfehlung für Abfahrt {timeutil.day_label(t)} um {t:%H:%M} Uhr"
 
 
 def _greeting() -> str:
@@ -78,11 +63,10 @@ def _greeting() -> str:
 
 
 def _empty_state() -> None:
-    with ui.column().classes("card w-full items-center text-center py-16 gap-3"):
-        ui.icon("add_road").classes("text-5xl muted")
-        ui.label("Noch keine Strecke angelegt").classes("text-xl font-bold")
-        ui.label("Lege in den Einstellungen deinen Weg an, z. B. Wohnung → DHBW.").classes("muted")
-        ui.button("Strecke anlegen", icon="add", on_click=lambda: ui.navigate.to("/einstellungen")).props("unelevated rounded no-caps")
+    with ui.column().classes("card w-full items-center text-center py-14 gap-2"):
+        ui.icon("travel_explore").classes("text-5xl muted")
+        ui.label("Wohin soll es gehen?").classes("text-xl font-bold")
+        ui.label("Gib oben Start und Ziel ein und wähle sie aus den Vorschlägen aus.").classes("muted")
 
 
 def _skeleton() -> None:
@@ -126,12 +110,12 @@ def _render(result: Result) -> None:
             _weather_card(data, result)
         with ui.column().classes("lg:col-span-2 gap-5"):
             with ui.column().classes("card w-full gap-1 fade-in d1"):
-                _transit_card(data)
+                _transit_card(data, result.arrive_by)
             with ui.column().classes("card w-full gap-1 fade-in d2"):
                 _traffic_card(data)
 
     stamp = "Demo-Daten" if data.demo else f"Daten von {data.fetched_at:%H:%M} Uhr"
-    ui.label(f"{stamp} · Empfehlung für {result.route.name}").classes("tiny muted")
+    ui.label(f"{stamp} · {result.route.origin.name} → {result.route.destination.name}").classes("tiny muted")
 
 
 def _hero(result: Result) -> None:
@@ -152,9 +136,7 @@ def _hero(result: Result) -> None:
                     with ui.element("div").classes("hero-icon shrink-0"):
                         ui.icon(rec.best.icon).classes("text-5xl text-white")
                     with ui.column().classes("gap-1"):
-                        ui.label(
-                            f"Empfehlung für {timeutil.day_label(result.departure)}, {result.departure:%H:%M} Uhr"
-                        ).classes("text-sm opacity-90 font-medium")
+                        ui.label(_when_text(result)).classes("text-sm opacity-90 font-medium")
                         ui.label(rec.headline).classes("hero-mode")
                         conf = {"klar": ("verified", "Klare Sache"), "knapp": ("balance", "Knappe Entscheidung")}
                         ic, txt = conf.get(rec.confidence, ("help", "Unsicher"))
@@ -297,14 +279,18 @@ def _weather_card(data: TravelData, result: Result) -> None:
     ).classes("w-full h-[230px]")
 
 
-def _transit_card(data: TravelData) -> None:
+def _transit_card(data: TravelData, arrive_by=None) -> None:
     with ui.row().classes("items-center gap-2 mb-1"):
         ui.icon("train").classes("text-xl").style("color: var(--bahn)")
-        ui.label("Nächste Verbindungen").classes("h-title")
+        ui.label(f"Ankunft bis {arrive_by:%H:%M}" if arrive_by else "Nächste Verbindungen").classes("h-title")
     if not data.transit:
         ui.label("Keine Verbindungsdaten." + (" Dienst nicht erreichbar." if "bahn" in data.errors else "")).classes("muted")
         return
-    for opt in data.transit[:4]:
+    options = data.transit
+    if arrive_by:  # im Ankunft-Modus nur, was rechtzeitig ankommt – die spätesten zuerst
+        in_time = [o for o in options if (o.arrival - arrive_by).total_seconds() <= 60]
+        options = sorted(in_time, key=lambda o: o.arrival, reverse=True) or options
+    for opt in options[:4]:
         chips = "".join(
             f'<span class="line-chip {(_line_kind(ln))}">{_esc(ln)}</span>' for ln in opt.lines
         ) or '<span class="muted tiny">zu Fuß</span>'
